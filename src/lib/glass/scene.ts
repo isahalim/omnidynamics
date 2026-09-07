@@ -8,13 +8,14 @@ import heroFractalMeshWgsl from "./hero-fractal-mesh.wgsl";
 import heroFractalPresentWgsl from "./hero-fractal-present.wgsl";
 import heroGlassTransmissionWgsl from "./hero-glass-transmission.wgsl";
 import heroGlassWgsl from "./hero-glass.wgsl";
-import type {
-  HeroFractalCamera,
-  HeroFractalGlass,
-  HeroFractalMaterial,
+import {
+  HERO_FRACTAL_GLASS,
+  type HeroFractalCamera,
+  type HeroFractalGlass,
+  type HeroFractalMaterial,
 } from "./settings";
 
-const HERO_LIGHT_CLEAR = 239 / 255; // matches the beige wall behind the canvas
+const HERO_LIGHT_CLEAR = 210 / 255; // #d2ccc2, the wall the canvas fades up from
 const GLASS_MODEL_MATRIX = modelMatrix(1, [0, 0, 0]);
 export const HERO_FLOOR_AO_DEFAULTS = {
   glassAoScale: 0.54,
@@ -32,12 +33,44 @@ export type HeroFloorAo = typeof HERO_FLOOR_AO_DEFAULTS;
 
 type SceneOutput = Surface | Target;
 
+/** Where a model interior sits inside the glass. */
+export interface InteriorFit {
+  readonly scale: number;
+  readonly offset: readonly [number, number, number];
+}
+
 /** One selectable shape inside the prism. Every entry shares the mesh shader. */
 export interface InteriorEntry {
   readonly draw: Draw;
   readonly meshMin: readonly [number, number, number];
   readonly meshMax: readonly [number, number, number];
+  /**
+   * Absent for vgpu's own fractal, which is authored in the prism's frame and
+   * drawn as four face instances that fill it from the origin. Our model
+   * meshes are single instances centred on their own bounds, so each needs
+   * placing inside the glass.
+   */
+  readonly fit?: InteriorFit;
 }
+
+/**
+ * The room a model interior is fitted into, as half-extents around the orb's
+ * centre.
+ *
+ * The glass is not centred on the world origin: the tetrahedron stands on the
+ * floor at y = -0.333 with its apex at y = 0.983, so a mesh centred on its own
+ * bounds and scaled to fill the prism hangs out through the base — which is
+ * what the humanoid did. The space inside is neither symmetric nor a sphere,
+ * so a single radius either clips the tall meshes or shrinks the wide ones to
+ * a smudge; these are per-axis limits, checked against all four models on the
+ * rendered page. Height is the generous axis because the tetrahedron is
+ * tallest through its middle, where the shapes sit.
+ *
+ * Fitting here also keeps the swap through the orb invisible: whichever mesh
+ * is loaded, the placement below resolves to exactly the orb's transform at
+ * full morph.
+ */
+const INTERIOR_HALF_EXTENTS = [0.34, 0.38, 0.34] as const;
 
 export interface HeroFractalScene {
   readonly present: Effect;
@@ -82,14 +115,42 @@ export interface HeroFractalFrameState {
   readonly time: number;
 }
 
-export function createCameraControls(camera: Readonly<HeroFractalCamera>) {
+export interface CameraFraming {
+  /**
+   * Pans the camera sideways, in world units, along its own right axis. The
+   * prism sits at the origin, so panning the camera right slides the prism
+   * left on screen. The canvas covers the whole viewport, so this is how a
+   * page moves the prism out from behind the column its copy occupies.
+   */
+  readonly focus?: number;
+  /**
+   * Dollies the camera along its own view axis. The angle is untouched, so the
+   * floor horizon holds its place and only the prism's share of the frame
+   * changes.
+   */
+  readonly distanceScale?: number;
+}
+
+/** Places the camera for a page, keeping vgpu's measured angle and FOV. */
+export function createCameraControls(
+  camera: Readonly<HeroFractalCamera>,
+  options: CameraFraming = {}
+) {
+  const { focus = 0, distanceScale = 1 } = options;
+  const position = add3(
+    camera.cameraTarget,
+    scale3(rotateCamera(camera.cameraDistance, camera.cameraRotation), distanceScale)
+  );
+  const up = rotateCamera([0, 1, 0], camera.cameraRotation);
+  const forward = normalize3(
+    subtract3(camera.cameraTarget, position),
+    [0, 0, -1]
+  );
+  const pan = scale3(normalize3(cross3(forward, up), [1, 0, 0]), focus);
   return {
-    position: add3(
-      camera.cameraTarget,
-      rotateCamera(camera.cameraDistance, camera.cameraRotation)
-    ),
-    target: [...camera.cameraTarget] as [number, number, number],
-    up: rotateCamera([0, 1, 0], camera.cameraRotation),
+    position: add3(position, pan),
+    target: add3(camera.cameraTarget, pan),
+    up,
     fov: camera.fov,
     maxMouseRotation: camera.maxMouseRotation,
     mouseLerp: camera.mouseLerp,
@@ -218,16 +279,24 @@ export function setHeroFractalSceneSettings(
     up,
   });
   const materialMix = clamp01(glass.sphereMix);
+  const interior =
+    scene.interiors.get(scene.activeInterior) ??
+    scene.interiors.get("fractal")!;
+  // The active shape's own placement, blended toward the orb's as the morph
+  // runs. Both resolve to the orb's transform at full morph, which is what lets
+  // `setState` swap the mesh mid-flight without the swap being visible.
+  const shapeScale = interior.fit?.scale ?? glass.fractalScale;
+  const shapeOffset = interior.fit?.offset ?? ([0, 0, 0] as const);
   const innerScale =
-    glass.fractalScale * (1 - materialMix) + glass.orbScale * materialMix;
+    shapeScale * (1 - materialMix) + glass.orbScale * materialMix;
   const material = blendMaterial(fractalMaterial, orbMaterial, materialMix);
   const environmentRotation = environmentRotationMatrix(
     glass.environmentRotation
   );
   const fractalModel = modelMatrix(innerScale, [
-    0,
-    glass.orbOffsetY * materialMix,
-    0,
+    shapeOffset[0] * (1 - materialMix),
+    shapeOffset[1] * (1 - materialMix) + glass.orbOffsetY * materialMix,
+    shapeOffset[2] * (1 - materialMix),
   ]);
   const time = settings.time ?? 0;
 
@@ -241,7 +310,7 @@ export function setHeroFractalSceneSettings(
       cameraUp: up,
       tanHalfFov: Math.tan((fov * Math.PI) / 360),
       floorGrid: settings.floorGrid ? 1 : 0,
-      fractalScale: glass.fractalScale,
+      fractalScale: shapeScale,
       orbScale: glass.orbScale,
       sphereMix: materialMix,
       ...(settings.floorAo ?? HERO_FLOOR_AO_DEFAULTS),
@@ -272,9 +341,6 @@ export function setHeroFractalSceneSettings(
     environmentTexture: assets.environmentView,
     environmentSampler: scene.environmentSampler,
   });
-  const interior =
-    scene.interiors.get(scene.activeInterior) ??
-    scene.interiors.get("fractal")!;
   interior.draw.set({
     params: {
       viewProjection: view.viewProjectionMatrix,
@@ -371,7 +437,31 @@ export async function registerInterior(
     label: `interior-${id}`,
   });
   await interiorDraw.compile(scene.interior);
-  scene.interiors.set(id, { draw: interiorDraw, meshMin, meshMax });
+  scene.interiors.set(id, {
+    draw: interiorDraw,
+    meshMin,
+    meshMax,
+    fit: interiorFit(meshMin, meshMax),
+  });
+}
+
+/**
+ * Scales a mesh uniformly until it fits `INTERIOR_HALF_EXTENTS` and lifts it to
+ * the orb's height. Model meshes are centred on their own bounding box, so the
+ * offset is the orb's and nothing else.
+ */
+function interiorFit(
+  meshMin: readonly [number, number, number],
+  meshMax: readonly [number, number, number]
+): InteriorFit {
+  // Uniform scale, so the tightest axis is the one that binds.
+  const scale = Math.min(
+    ...INTERIOR_HALF_EXTENTS.map((limit, axis) => {
+      const half = (meshMax[axis]! - meshMin[axis]!) / 2;
+      return limit / (half || 1);
+    })
+  );
+  return { scale, offset: [0, HERO_FRACTAL_GLASS.orbOffsetY, 0] };
 }
 
 export function destroyHeroFractalScene(scene: HeroFractalScene): void {

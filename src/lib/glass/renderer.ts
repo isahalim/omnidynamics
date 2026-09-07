@@ -1,5 +1,5 @@
 import type { Draw, Geometry, Gpu, Surface } from "vgpu";
-import { draw, frame, geometry, surface } from "vgpu";
+import { draw, frame, geometry, init, surface } from "vgpu";
 import { perspectiveCamera, sphere } from "vgpu/scene";
 import { loadHeroGlassAssets, type HeroGlassAssets } from "./hero-glass-assets";
 import {
@@ -10,6 +10,7 @@ import {
 import {
   createCameraControls,
   createHeroFractalScene,
+  type CameraFraming,
   HERO_FLOOR_AO_DEFAULTS,
   modelMatrix,
   renderHeroFractalScene,
@@ -41,11 +42,15 @@ const SPHERE_MORPH_DURATION_MS = 1040;
 
 interface RendererOptions {
   readonly canvas: HTMLCanvasElement;
+  /** How this page frames the prism against its full-viewport wall. */
+  readonly framing?: CameraFraming;
 }
 
 interface Renderer {
   readonly ready: Promise<void>;
   setSphereMix(value: number): void;
+  /** Re-pans the camera; the page narrows and the prism recentres. */
+  setFocus(focus: number): void;
   /** Morphs out to the orb, swaps the interior mesh, then morphs in. */
   setState(state: PrismState): Promise<void>;
   readonly state: PrismState;
@@ -125,7 +130,8 @@ export function createRenderer(options: RendererOptions): Renderer {
       number
     ],
   };
-  const cameraControls = createCameraControls(HERO_FRACTAL_CAMERA);
+  let framing: CameraFraming = options.framing ?? {};
+  let cameraControls = createCameraControls(HERO_FRACTAL_CAMERA, framing);
   const debugQuery = new URLSearchParams(window.location.search);
   const debug = {
     view: (debugQuery.get("debug") === "reflection"
@@ -316,6 +322,13 @@ export function createRenderer(options: RendererOptions): Renderer {
     }
   };
 
+  const setFocus = (focus: number) => {
+    if ((framing.focus ?? 0) === focus) return;
+    framing = { ...framing, focus };
+    cameraControls = createCameraControls(HERO_FRACTAL_CAMERA, framing);
+    requestMaterialDraw();
+  };
+
   const setSphereMix = (value: number) => {
     const nextMix = Math.min(1, Math.max(0, value));
     if (nextMix === morphTargetMix && !morphFrame) return;
@@ -446,8 +459,6 @@ export function createRenderer(options: RendererOptions): Renderer {
   };
 
   const initialize = async () => {
-    const { init } = await import("vgpu");
-    if (disposed) return;
     const nextGpu = await init();
     if (disposed) {
       nextGpu.dispose();
@@ -587,6 +598,7 @@ export function createRenderer(options: RendererOptions): Renderer {
   return {
     ready,
     setSphereMix,
+    setFocus,
     setState,
     get state() {
       return prismState;

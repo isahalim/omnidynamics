@@ -7,10 +7,26 @@ import { shadeWall } from "./hero-wall.wgsl";
 
 // World units per material tile: vgpu uses prismSide * 2.4.
 const WALL_WORLD_SCALE = 3.4;
-// Tile density for the backdrop, which is read as a head-on wall.
-const WALL_SCREEN_SCALE = 2.6;
+// Tile density for the backdrop, which is read as a head-on wall. The uv is
+// normalised by the resolution, so a tile is a fixed share of the viewport and
+// the tooth keeps its size across display densities. This was tuned when the
+// canvas was a 68vh frame; the canvas is now the whole viewport, and vgpu's
+// wall is finer-grained than that value left ours.
+const WALL_SCREEN_SCALE = 5.2;
+
+// vgpu's light pipeline paints the wall #d2ccc2 (read off the wall nodes on
+// vgpu.sh/?debug). `WALL_COLOR` is the linear albedo that lands on that sRGB
+// value once `presentCeramic`'s ACES curve and gamma have been applied to the
+// baked plaster's mean response — `node scripts/check-wall-color.mjs` derives
+// it and prints the falloff range below.
+const WALL_COLOR = vec3f(0.775, 0.681, 0.560);
+const WALL_LIGHT_PEAK = 1.04;
+const WALL_LIGHT_FALLOFF = 0.80;
 
 const HERO_FLOOR_Y = -0.33333333333;
+// Rays that never meet the floor are pinned here so their UV gradients stay
+// finite for the quad-wide derivative of the pixels that do hit it.
+const FLOOR_MAX_DISTANCE = 64.0;
 
 struct Params {
   resolution: vec2f,
@@ -78,28 +94,44 @@ fn gridLine(coordinate: vec2f, spacing: f32, pixelFootprint: f32) -> f32 {
   let uv = in.position.xy / max(params.resolution, vec2f(1.0));
   let ro = params.cameraPosition;
   let rd = cameraRay(uv);
-  // `presentCeramic` maps the neutral linear value to #fafafa. A broad,
-  // screen-space top-right vignette gives the glass a little more contrast,
-  // while fading completely before the bottom edge so the hero still meets
-  // the rest of the page without a seam.
+  // A broad window pool anchored above the top-right corner, fading out before
+  // the bottom edge. `uv.y` is 0 at the top, so the centre sits just off-screen
+  // above the canvas, the way the light falls on vgpu.sh's own wall.
   let cornerDistance = length(vec2f(
-    (uv.x - 0.95) * 0.85,
-    uv.y * 1.15,
+    (uv.x - 0.78) * 0.85,
+    (uv.y + 0.10) * 1.15,
   ));
-  let topRightShade = 1.0 - smoothstep(0.08, 1.0, cornerDistance);
-  // Warm the neutral studio backdrop toward the page's beige wall so the canvas
-  // and the surrounding page read as one surface.
-  let wallTint = vec3f(2.93, 2.871, 2.757) * mix(1.0, 0.46, topRightShade);
+  let lightPool = 1.0 - smoothstep(0.08, 1.0, cornerDistance);
+  let wallTint = WALL_COLOR * mix(WALL_LIGHT_FALLOFF, WALL_LIGHT_PEAK, lightPool);
   // Aspect-corrected so the plaster never stretches with the viewport.
   let wallUv = vec2f(
     uv.x * params.resolution.x / max(params.resolution.y, 1.0),
     uv.y,
   ) * WALL_SCREEN_SCALE;
-  let backdrop = shadeWall(wallUv, wallTint, wallMaterial, wallSampler).color;
+  let backdrop = shadeWall(
+    wallUv,
+    dpdx(wallUv),
+    dpdy(wallUv),
+    wallTint,
+    wallMaterial,
+    wallSampler,
+  ).color;
+
+  // The floor plane is intersected unconditionally so its UV gradients can be
+  // taken here, in uniform control flow — `dpdx`/`dpdy` and the sampling they
+  // feed are undefined once the shader is inside the ray-hit branch below.
+  // Rays that travel up or away are pinned to a grazing hit far down the
+  // plane, which is the same coarse mip the horizon wants anyway, and their
+  // colour is discarded.
+  let floorDenominator = min(rd.y, -0.0001);
+  let floorT = (HERO_FLOOR_Y - ro.y) / floorDenominator;
+  let floorPoint = ro + rd * clamp(floorT, 0.0, FLOOR_MAX_DISTANCE);
+  let floorUv = floorPoint.xz / WALL_WORLD_SCALE;
+  let floorUvDx = dpdx(floorUv);
+  let floorUvDy = dpdy(floorUv);
+
   if (rd.y < -0.0001) {
-    let floorT = (HERO_FLOOR_Y - ro.y) / rd.y;
     if (floorT > 0.0) {
-      let floorPoint = ro + rd * floorT;
       let floorAoSettings = HeroFloorAoSettings(
         params.glassAoScale,
         params.glassAoAmplitude,
@@ -121,7 +153,9 @@ fn gridLine(coordinate: vec2f, spacing: f32, pixelFootprint: f32) -> f32 {
       // The floor is the same plaster seen in perspective, so it takes world
       // coordinates rather than the backdrop's screen-space projection.
       var floorColor = shadeWall(
-        floorPoint.xz / WALL_WORLD_SCALE,
+        floorUv,
+        floorUvDx,
+        floorUvDy,
         wallTint,
         wallMaterial,
         wallSampler,

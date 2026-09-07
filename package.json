@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build",
+    "build": "node scripts/check-shaders.mjs && astro build",
     "preview": "wrangler dev",
     "check": "astro check",
+    "check:shaders": "node scripts/check-shaders.mjs",
     "deploy": "astro build && wrangler deploy"
   },
   "devDependencies": {

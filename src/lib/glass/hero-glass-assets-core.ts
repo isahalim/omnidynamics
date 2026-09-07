@@ -1,7 +1,7 @@
 import type { Geometry, GeometryBufferOptions, Gpu } from "vgpu";
 import { geometry } from "vgpu";
 import type { Texture } from "vgpu/core";
-import { cubeView } from "vgpu/core";
+import { createSampler, cubeView } from "vgpu/core";
 
 const MESH_HEADER_SIZE = 40;
 const CUBEMAP_COLUMNS = 3;
@@ -153,7 +153,9 @@ function createWallMaterial(gpu: Gpu, atlas: RgbaAtlas) {
     levelSize >>= 1;
   }
 
-  const sampler = gpu.device.createSampler({
+  // vgpu exposes samplers as a free helper on `vgpu/core`; the device wrapper
+  // has no `createSampler`.
+  const sampler = createSampler(gpu.device, {
     minFilter: "linear",
     magFilter: "linear",
     mipmapFilter: "linear",
@@ -274,7 +276,9 @@ export function decodeMesh(gpu: Gpu, buffer: ArrayBuffer, label: string) {
   const vertexData = new Uint8Array(
     buffer.slice(MESH_HEADER_SIZE, indexOffset)
   );
-  const indices = new Uint16Array(buffer.slice(indexOffset));
+  const indices = padTriangleIndices(new Uint16Array(buffer.slice(indexOffset)));
+  // A line list always has an even index count, so its uint16 buffer is
+  // already 4-byte aligned and needs no padding.
   const wireframeIndices = triangleEdges(indices);
   const buffers: GeometryBufferOptions[] = [
     {
@@ -315,6 +319,24 @@ export function decodeMesh(gpu: Gpu, buffer: ArrayBuffer, label: string) {
     }
     throw error;
   }
+}
+
+/**
+ * Pads a triangle list until its uint16 buffer is a multiple of four bytes.
+ *
+ * `writeBuffer` rejects any size that is not, so a mesh with an odd index
+ * count — an odd triangle count, which the decimator is free to produce —
+ * fails to upload at all. Appending one degenerate triangle keeps the count a
+ * whole number of triangles and rasterises nothing.
+ */
+function padTriangleIndices(indices: Uint16Array): Uint16Array {
+  if (indices.byteLength % 4 === 0) return indices;
+  const padded = new Uint16Array(indices.length + 3);
+  padded.set(indices);
+  // Three copies of one vertex: zero area, so it never reaches the fragment
+  // stage. `indices[0]` is always in range; the caller rejects empty meshes.
+  padded.fill(indices[0]!, indices.length);
+  return padded;
 }
 
 function triangleEdges(indices: Uint16Array): Uint16Array {

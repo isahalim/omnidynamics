@@ -20,7 +20,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     <meta property="og:description" content={description} />
     <meta property="og:type" content="website" />
     <meta property="og:url" content={canonical} />
-    <meta name="theme-color" content="#efeae1" />
+    <meta name="theme-color" content="#d2ccc2" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   </head>
   <body>
@@ -30,8 +30,11 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
 
 <style is:global>
   :root {
-    --wall: #efeae1;
-    --wall-deep: #e4dccf;
+    /* vgpu's light-pipeline wall, read off vgpu.sh/?debug. The prism canvas
+       shades this same colour on the GPU; the token is what stands in before
+       the canvas is up, and what the UI chrome tints against. */
+    --wall: #d2ccc2;
+    --wall-deep: #c9c2b7;
     --ink: #16130f;
     --muted: #6d6459;
     --accent: #c0281d;
@@ -53,24 +56,16 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
       Arial, sans-serif;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
-    /* A lit plaster wall: warm base, soft window falloff, faint tint. */
+    /* The lit plaster and its tooth are shaded by the prism canvas, which
+       covers the whole viewport. This gradient is only ever seen where that
+       canvas is not: the 404, the moment before it fades up, and browsers
+       without WebGPU. It cannot show as a seam the way the old CSS wall did,
+       because the canvas either covers it completely or not at all — so it
+       approximates the shader's window pool rather than sitting flat. */
     background:
-      radial-gradient(120% 80% at 78% -10%, rgb(255 255 255 / 0.9) 0%, transparent 55%),
-      radial-gradient(90% 70% at 8% 105%, rgb(196 182 160 / 0.4) 0%, transparent 60%),
+      radial-gradient(120% 90% at 78% -12%, #d8d3c9 0%, transparent 62%),
       linear-gradient(168deg, var(--wall) 0%, var(--wall-deep) 100%);
     background-attachment: fixed;
-  }
-
-  /* Plaster tooth. Sits above the page but below interaction. */
-  body::after {
-    content: "";
-    position: fixed;
-    inset: 0;
-    z-index: 1;
-    pointer-events: none;
-    opacity: 0.32;
-    mix-blend-mode: multiply;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
   }
 
   img, svg { display: block; max-inline-size: 100%; }

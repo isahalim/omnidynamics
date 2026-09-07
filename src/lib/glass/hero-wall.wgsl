@@ -3,8 +3,8 @@
 // a = roughness. Two samples at different frequencies give the coarse trowel
 // undulation and the fine tooth; scratches ride in the same height field.
 
-// vgpu's measured look-development values (pipelines/light/config.ts).
-const WALL_NORMAL_STRENGTH = 0.22;
+// vgpu's light-pipeline values, read from the wall nodes on vgpu.sh/?debug.
+const WALL_NORMAL_STRENGTH = 0.6;
 const WALL_MICRO_FREQUENCY = 7.0;
 const WALL_MICRO_STRENGTH = 1.05;
 const WALL_AMBIENT = 0.5;
@@ -27,19 +27,30 @@ struct WallShade {
  * Lights one point of plaster. `uv` is in tile units; callers pass world
  * coordinates for the floor and screen coordinates for the backdrop, which is
  * viewed near head-on.
+ *
+ * The caller supplies the UV gradients rather than letting the sampler take
+ * them implicitly: the floor is shaded inside a ray-hit branch, and
+ * `textureSample` may only be called from uniform control flow. `dpdx`/`dpdy`
+ * run in the caller's uniform scope and the mip chain is still selected
+ * per-pixel, which is what keeps the receding floor from aliasing.
  */
 export fn shadeWall(
   uv: vec2f,
+  uvDx: vec2f,
+  uvDy: vec2f,
   tint: vec3f,
   wallMaterial: texture_2d<f32>,
   wallSampler: sampler,
 ) -> WallShade {
-  let material = textureSample(wallMaterial, wallSampler, uv);
+  let material = textureSampleGrad(wallMaterial, wallSampler, uv, uvDx, uvDy);
   // The micro layer is offset so it never lines up with the coarse pattern.
-  let microMaterial = textureSample(
+  // Its gradients scale with the frequency so it picks the matching mip.
+  let microMaterial = textureSampleGrad(
     wallMaterial,
     wallSampler,
     uv * WALL_MICRO_FREQUENCY + vec2f(0.371, 0.613),
+    uvDx * WALL_MICRO_FREQUENCY,
+    uvDy * WALL_MICRO_FREQUENCY,
   );
 
   let largeXy = (material.gb * 2.0 - 1.0) * WALL_NORMAL_STRENGTH;

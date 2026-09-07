@@ -24,6 +24,12 @@ jobs:
       - name: Install
         run: npm ci
 
+      # `npm run build` validates every WGSL entry against a real device before
+      # it builds. CI runners have no GPU, so vgpu's portable CPU renderer is
+      # what makes that check runnable here.
+      - name: Install WebGPU software renderer
+        run: npx --no -- vgpu install-software-renderer
+
       - name: Build
         run: npm run build
 
@@ -51,6 +57,12 @@ jobs:
 
       - name: Install
         run: npm ci
+
+      # `npm run build` validates every WGSL entry against a real device before
+      # it builds. CI runners have no GPU, so vgpu's portable CPU renderer is
+      # what makes that check runnable here.
+      - name: Install WebGPU software renderer
+        run: npx --no -- vgpu install-software-renderer
 
       - name: Build
         run: npm run build
