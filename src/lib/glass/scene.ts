@@ -6,6 +6,7 @@ import type { HeroGlassAssets } from "./hero-glass-assets-core";
 import heroFractalBackgroundDrawWgsl from "./hero-fractal-background-draw.wgsl";
 import heroFractalMeshWgsl from "./hero-fractal-mesh.wgsl";
 import heroFractalPresentWgsl from "./hero-fractal-present.wgsl";
+import heroPrismCausticWgsl from "./hero-prism-caustic.wgsl";
 import heroGlassTransmissionWgsl from "./hero-glass-transmission.wgsl";
 import heroGlassWgsl from "./hero-glass.wgsl";
 import {
@@ -17,19 +18,62 @@ import {
 
 const HERO_LIGHT_CLEAR = 210 / 255; // #d2ccc2, the wall the canvas fades up from
 const GLASS_MODEL_MATRIX = modelMatrix(1, [0, 0, 0]);
-export const HERO_FLOOR_AO_DEFAULTS = {
-  glassAoScale: 0.54,
-  glassAoAmplitude: 0.41,
-  glassAoOpacity: 0.11,
-  fractalAoScale: 0.88,
-  fractalAoAmplitude: 0.18,
-  fractalAoOpacity: 0.57,
-  orbAoScale: 0.58,
-  orbAoAmplitude: 0.59,
-  orbAoOpacity: 0.73,
+/**
+ * How the prism's shadow sits on the wall behind it.
+ *
+ * The backdrop used to be a floor and these were floor-space occlusion blobs.
+ * The wall replaced it, so what is left is a cast shadow: offset from the
+ * silhouette along the key light, and an unoffset contact term that hugs it.
+ * Distances are in aspect-corrected screen units, where 1.0 is the canvas
+ * height.
+ */
+export const HERO_WALL_SHADOW_DEFAULTS = {
+  /**
+   * Down and to the right, matching the key light high on the left. Small: the
+   * prism is close to the wall, so most of the shadow stays behind it and only
+   * a soft edge shows.
+   */
+  shadowOffset: [0.038, -0.030] as readonly [number, number],
+  shadowSoftness: 0.11,
+  shadowOpacity: 0.55,
+  contactOpacity: 0.22,
+  /** The penumbra spreads the silhouette a little past the shape itself. */
+  shadowSpread: 1.02,
 };
 
-export type HeroFloorAo = typeof HERO_FLOOR_AO_DEFAULTS;
+export type HeroWallShadow = typeof HERO_WALL_SHADOW_DEFAULTS;
+
+/**
+ * The spectral beam, as vgpu's exterior caustic node exposes it. Beam
+ * geometry, Cauchy dispersion, light appearance and caustic compositing are
+ * its four groups; the names here are its names.
+ */
+export const HERO_CAUSTIC_DEFAULTS = {
+  /**
+   * In wall units, where 1.0 is the canvas height. vgpu's 0.025 is in its own
+   * beam-space; at this scale it draws a bar rather than a beam.
+   */
+  beamWidth: 0.009,
+  baseIor: 1.2,
+  /**
+   * Spread about the mean index — see `indexOfRefraction`. Far wider than any
+   * real glass, which is what opens the fan into vgpu's rainbow rather than
+   * the few degrees physical dispersion would give.
+   */
+  dispersion: 0.055,
+  beamOpacity: 1,
+  edgeFalloff: 16,
+  rainbowRate: 3.8,
+  rainbowPower: 3.7,
+  /**
+   * vgpu's 1.9 and 0.86 are against its own HDR backdrop target. Ours composite
+   * straight onto the wall, where those values buried the copy the fan falls
+   * across; these keep the same spread with the text still readable through it.
+   */
+  strength: 1.35,
+  coverage: 0.72,
+};
+export type HeroCaustic = typeof HERO_CAUSTIC_DEFAULTS;
 
 type SceneOutput = Surface | Target;
 
@@ -72,9 +116,24 @@ export interface InteriorEntry {
  */
 const INTERIOR_HALF_EXTENTS = [0.34, 0.38, 0.34] as const;
 
+/**
+ * How far a model interior turns to follow the cursor, in radians.
+ *
+ * The camera's own orbit is a few degrees of parallax on the whole scene; this
+ * is the shape itself turning, which is what makes it read as an object you
+ * are looking around rather than a picture that shifts. Only models spin —
+ * vgpu's fractal is a sphere at rest, where a spin would be invisible.
+ */
+const INTERIOR_SPIN_YAW = 0.46;
+const INTERIOR_SPIN_PITCH = 0.24;
+
 export interface HeroFractalScene {
   readonly present: Effect;
   readonly background: Draw;
+  /** vgpu's "3-4 - draw exterior light": the beam in and the spectrum out. */
+  readonly exteriorCaustic: Draw;
+  /** vgpu's "6 - draw internal light", drawn after the back faces. */
+  readonly internalCaustic: Draw;
   readonly glassBack: Draw;
   readonly fractal: Draw;
   readonly glassFront: Draw;
@@ -85,6 +144,10 @@ export interface HeroFractalScene {
   readonly interiors: Map<string, InteriorEntry>;
   /** Key into interiors; the shape currently drawn and morphed. */
   activeInterior: string;
+  /** The coming-soon pages show the beam; the landing page does not. */
+  caustics: boolean;
+  /** The coming-soon pages leave the glass empty. */
+  showInterior: boolean;
 }
 
 export interface HeroFractalSceneSettings {
@@ -101,8 +164,8 @@ export interface HeroFractalSceneSettings {
     readonly pointer: readonly [number, number];
     readonly maxMouseRotation: number;
   };
-  readonly floorAo?: Readonly<HeroFloorAo>;
-  readonly floorGrid?: boolean;
+  readonly wallShadow?: Readonly<HeroWallShadow>;
+  readonly caustic?: Readonly<HeroCaustic>;
   readonly morphDirection?: number;
   readonly reflectionDebug?: boolean;
 }
@@ -175,6 +238,20 @@ export async function createHeroFractalScene(
       depth: false,
       label: `${label}-fractal-background`,
     }),
+    exteriorCaustic: draw(gpu, {
+      shader: heroPrismCausticWgsl,
+      vertices: 3,
+      depth: false,
+      blend: "additive",
+      label: `${label}-prism-caustic-exterior`,
+    }),
+    internalCaustic: draw(gpu, {
+      shader: heroPrismCausticWgsl,
+      vertices: 3,
+      depth: false,
+      blend: "additive",
+      label: `${label}-prism-caustic-internal`,
+    }),
     glassBack: draw(gpu, {
       shader: heroGlassWgsl,
       geometry: assets.geometry,
@@ -219,11 +296,15 @@ export async function createHeroFractalScene(
     }),
     interiors: new Map<string, InteriorEntry>(),
     activeInterior: "fractal",
+    caustics: false,
+    showInterior: true,
   } satisfies HeroFractalScene;
 
   try {
     await Promise.all([
       scene.background.compile(scene.interior),
+      scene.exteriorCaustic.compile(scene.interior),
+      scene.internalCaustic.compile(scene.interior),
       scene.glassBack.compile(scene.interior),
       scene.fractal.compile(scene.interior),
       scene.glassFront.compile({ colors: [output.format] }),
@@ -293,29 +374,59 @@ export function setHeroFractalSceneSettings(
   const environmentRotation = environmentRotationMatrix(
     glass.environmentRotation
   );
-  const fractalModel = modelMatrix(innerScale, [
-    shapeOffset[0] * (1 - materialMix),
-    shapeOffset[1] * (1 - materialMix) + glass.orbOffsetY * materialMix,
-    shapeOffset[2] * (1 - materialMix),
-  ]);
+  const pointer = settings.view?.pointer ?? [0, 0];
+  // The shape turns toward the cursor, and unwinds as it morphs back to the
+  // orb, where a rotation would have nothing to show.
+  const spin = interior.fit ? 1 - materialMix : 0;
+  const fractalModel = spinModelMatrix(
+    innerScale,
+    [
+      shapeOffset[0] * (1 - materialMix),
+      shapeOffset[1] * (1 - materialMix) + glass.orbOffsetY * materialMix,
+      shapeOffset[2] * (1 - materialMix),
+    ],
+    -pointer[0] * INTERIOR_SPIN_YAW * spin,
+    -pointer[1] * INTERIOR_SPIN_PITCH * spin
+  );
   const time = settings.time ?? 0;
 
+  // Where the prism lands on the wall, so the shadow pass can place itself
+  // without reading depth. The glass mesh is not centred on the origin, so its
+  // own bounds are projected rather than the origin.
+  const shadow = settings.wallShadow ?? HERO_WALL_SHADOW_DEFAULTS;
+  const footprint = projectPrismFootprint(
+    view.viewProjectionMatrix,
+    assets.meshMin,
+    assets.meshMax,
+    resolution
+  );
   scene.background.set({
     wallMaterial: assets.wallMaterial,
     wallSampler: assets.wallSampler,
     params: {
       resolution,
-      cameraPosition: position,
-      cameraTarget: target,
-      cameraUp: up,
-      tanHalfFov: Math.tan((fov * Math.PI) / 360),
-      floorGrid: settings.floorGrid ? 1 : 0,
-      fractalScale: shapeScale,
-      orbScale: glass.orbScale,
-      sphereMix: materialMix,
-      ...(settings.floorAo ?? HERO_FLOOR_AO_DEFAULTS),
+      prismCenter: footprint.center,
+      prismHalfExtent: [
+        footprint.halfExtent[0] * shadow.shadowSpread,
+        footprint.halfExtent[1] * shadow.shadowSpread,
+      ],
+      shadowOffset: shadow.shadowOffset,
+      shadowSoftness: shadow.shadowSoftness,
+      shadowOpacity: shadow.shadowOpacity,
+      contactOpacity: shadow.contactOpacity,
     },
   });
+  const caustic = settings.caustic ?? HERO_CAUSTIC_DEFAULTS;
+  const causticParams = {
+    resolution,
+    prismCenter: footprint.center,
+    prismHalfExtent: footprint.halfExtent,
+    pointer,
+    ...caustic,
+  };
+  scene.exteriorCaustic.set({ params: { ...causticParams, segment: 0 } });
+  scene.internalCaustic.set({ params: { ...causticParams, segment: 1 } });
+
   const glassParams = {
     viewProjection: view.viewProjectionMatrix,
     model: GLASS_MODEL_MATRIX,
@@ -387,12 +498,19 @@ export function renderHeroFractalScene(
         clear: [HERO_LIGHT_CLEAR, HERO_LIGHT_CLEAR, HERO_LIGHT_CLEAR, 1],
       },
       (pass) => {
+        // vgpu's backdrop pass draws the wall and its shadow, then the exterior
+        // light, then the glass back faces, then the internal light. Ours adds
+        // the interior shape at the end, inside the glass.
         pass.draw(scene.background);
+        if (scene.caustics) pass.draw(scene.exteriorCaustic);
         pass.draw(scene.glassBack);
-        pass.draw(
-          (scene.interiors.get(scene.activeInterior) ??
-            scene.interiors.get("fractal")!).draw
-        );
+        if (scene.caustics) pass.draw(scene.internalCaustic);
+        if (scene.showInterior) {
+          pass.draw(
+            (scene.interiors.get(scene.activeInterior) ??
+              scene.interiors.get("fractal")!).draw
+          );
+        }
       }
     );
     currentFrame.pass(
@@ -450,6 +568,31 @@ export async function registerInterior(
  * the orb's height. Model meshes are centred on their own bounding box, so the
  * offset is the orb's and nothing else.
  */
+/**
+ * A model matrix that also turns the shape: yaw about Y, then pitch about X.
+ *
+ * The scale stays uniform, so the mesh shader's `model * vec4(normal, 0)` is
+ * still a correct normal transform.
+ */
+function spinModelMatrix(
+  scale: number,
+  translation: readonly [number, number, number],
+  yaw: number,
+  pitch: number
+): Float32Array {
+  const cy = Math.cos(yaw);
+  const sy = Math.sin(yaw);
+  const cx = Math.cos(pitch);
+  const sx = Math.sin(pitch);
+  // Ry(yaw) * Rx(pitch), stored column-major and pre-scaled.
+  return new Float32Array([
+    scale * cy, 0, scale * -sy, 0,
+    scale * sy * sx, scale * cx, scale * cy * sx, 0,
+    scale * sy * cx, scale * -sx, scale * cy * cx, 0,
+    translation[0], translation[1], translation[2], 1,
+  ]);
+}
+
 function interiorFit(
   meshMin: readonly [number, number, number],
   meshMax: readonly [number, number, number]
@@ -462,6 +605,66 @@ function interiorFit(
     })
   );
   return { scale, offset: [0, HERO_FRACTAL_GLASS.orbOffsetY, 0] };
+}
+
+/**
+ * Projects the glass mesh's bounds to the wall plane: the centre the shadow is
+ * cast from, and a radius that covers the silhouette.
+ *
+ * Returned in the same aspect-corrected screen units the wall pass works in —
+ * origin at the canvas centre, y up, 1.0 across the canvas height — so the
+ * shadow tracks the prism through a camera pan or dolly without the shader
+ * needing the view matrix.
+ */
+function projectPrismFootprint(
+  viewProjection: Float32Array,
+  meshMin: readonly [number, number, number],
+  meshMax: readonly [number, number, number],
+  resolution: readonly [number, number]
+): { center: [number, number]; halfExtent: [number, number] } {
+  const aspect = resolution[0] / Math.max(resolution[1], 1);
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  // Every corner of the bounding box, so the footprint holds whatever way the
+  // camera is pointed.
+  for (let corner = 0; corner < 8; corner++) {
+    const point: [number, number, number] = [
+      corner & 1 ? meshMax[0] : meshMin[0],
+      corner & 2 ? meshMax[1] : meshMin[1],
+      corner & 4 ? meshMax[2] : meshMin[2],
+    ];
+    const clip = transformPoint(viewProjection, point);
+    if (clip[3] <= 0.0001) continue;
+    const x = (clip[0] / clip[3]) * 0.5 * aspect;
+    const y = (clip[1] / clip[3]) * 0.5;
+    minX = Math.min(minX, x);
+    maxX = Math.max(maxX, x);
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, y);
+  }
+  if (!Number.isFinite(minX) || !Number.isFinite(minY)) {
+    return { center: [0, 0], halfExtent: [0.3, 0.3] };
+  }
+  return {
+    center: [(minX + maxX) / 2, (minY + maxY) / 2],
+    halfExtent: [(maxX - minX) / 2, (maxY - minY) / 2],
+  };
+}
+
+/** Column-major 4x4 times a point, returning clip space. */
+function transformPoint(
+  matrix: Float32Array,
+  point: readonly [number, number, number]
+): [number, number, number, number] {
+  const [x, y, z] = point;
+  return [
+    matrix[0]! * x + matrix[4]! * y + matrix[8]! * z + matrix[12]!,
+    matrix[1]! * x + matrix[5]! * y + matrix[9]! * z + matrix[13]!,
+    matrix[2]! * x + matrix[6]! * y + matrix[10]! * z + matrix[14]!,
+    matrix[3]! * x + matrix[7]! * y + matrix[11]! * z + matrix[15]!,
+  ];
 }
 
 export function destroyHeroFractalScene(scene: HeroFractalScene): void {

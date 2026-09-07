@@ -11,12 +11,11 @@ import {
   createCameraControls,
   createHeroFractalScene,
   type CameraFraming,
-  HERO_FLOOR_AO_DEFAULTS,
+  HERO_WALL_SHADOW_DEFAULTS,
   modelMatrix,
   renderHeroFractalScene,
   resizeHeroFractalScene,
   setHeroFractalSceneSettings,
-  type HeroFloorAo,
   type HeroFractalScene,
 } from "./scene";
 import heroDebugAxesWgsl from "./hero-debug-axes.wgsl";
@@ -44,6 +43,14 @@ interface RendererOptions {
   readonly canvas: HTMLCanvasElement;
   /** How this page frames the prism against its full-viewport wall. */
   readonly framing?: CameraFraming;
+  /**
+   * Draws the spectral beam through the prism. The coming-soon pages are
+   * vgpu's light pipeline with our copy on it; the landing page holds a
+   * platform in the glass instead, and the beam would fight it.
+   */
+  readonly caustics?: boolean;
+  /** False leaves the glass empty, the way vgpu's own hero is. */
+  readonly interior?: boolean;
 }
 
 interface Renderer {
@@ -120,7 +127,7 @@ export function createRenderer(options: RendererOptions): Renderer {
   let lastDpr = typeof window === "undefined" ? 1 : window.devicePixelRatio;
   const fractalMaterial = copyMaterial(HERO_FRACTAL_MATERIAL);
   const orbMaterial = copyMaterial(HERO_ORB_MATERIAL);
-  const floorAo = { ...HERO_FLOOR_AO_DEFAULTS };
+  const wallShadow = { ...HERO_WALL_SHADOW_DEFAULTS };
   const glass = {
     ...HERO_FRACTAL_GLASS,
     absorption: [...HERO_FRACTAL_GLASS.absorption] as [number, number, number],
@@ -138,7 +145,6 @@ export function createRenderer(options: RendererOptions): Renderer {
       ? "reflection"
       : "final") as DebugView,
     wireframe: false,
-    floorGrid: false,
     coloredAxes: false,
     cameraTarget: false,
   };
@@ -160,8 +166,7 @@ export function createRenderer(options: RendererOptions): Renderer {
           ...cameraControls,
           pointer: [pointerCurrentX, pointerCurrentY],
         },
-        floorAo,
-        floorGrid: debug.floorGrid,
+        wallShadow,
         morphDirection,
         reflectionDebug: debug.view === "reflection",
       }
@@ -485,6 +490,8 @@ export function createRenderer(options: RendererOptions): Renderer {
       "homepage-light"
     );
     if (disposed) return;
+    loadedScene.caustics = options.caustics ?? false;
+    loadedScene.showInterior = options.interior ?? true;
     coreScene = loadedScene;
     draws = {
       glassWireframe: draw(gpu, {

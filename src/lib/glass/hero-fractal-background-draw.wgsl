@@ -1,52 +1,60 @@
-import {
-  HeroFloorAoSettings,
-  heroFloorAo,
-} from "./hero-fractal-floor-ao.wgsl";
 import { presentCeramic } from "./hero-fractal-presentation.wgsl";
 import { shadeWall } from "./hero-wall.wgsl";
 
-// World units per material tile: vgpu uses prismSide * 2.4.
-const WALL_WORLD_SCALE = 3.4;
-// Tile density for the backdrop, which is read as a head-on wall. The uv is
-// normalised by the resolution, so a tile is a fixed share of the viewport and
-// the tooth keeps its size across display densities. This was tuned when the
-// canvas was a 68vh frame; the canvas is now the whole viewport, and vgpu's
-// wall is finer-grained than that value left ours.
+// The backdrop is a wall, not a floor. vgpu's light pipeline draws its wall as
+// one full-screen pass — "Coverage: full screen" on the wall draw node — with
+// the prism floating in front of it and its shadow falling on the wall behind.
+// An earlier version raymarched a horizontal plane here, which read as a floor
+// the prism stood on: the plaster rushed away in perspective toward a horizon
+// and the shape sat in a contact pool. Everything below is in the wall plane,
+// which faces the camera.
+
+// Tile density for the wall. The uv is normalised by the resolution, so a tile
+// is a fixed share of the viewport and the tooth keeps its size across display
+// densities.
 const WALL_SCREEN_SCALE = 5.2;
 
 // vgpu's light pipeline paints the wall #d2ccc2 (read off the wall nodes on
 // vgpu.sh/?debug). `WALL_COLOR` is the linear albedo that lands on that sRGB
 // value once `presentCeramic`'s ACES curve and gamma have been applied to the
 // baked plaster's mean response — `node scripts/check-wall-color.mjs` derives
-// it and prints the falloff range below.
+// it.
 const WALL_COLOR = vec3f(0.775, 0.681, 0.560);
-const WALL_LIGHT_PEAK = 1.04;
-const WALL_LIGHT_FALLOFF = 0.80;
 
-const HERO_FLOOR_Y = -0.33333333333;
-// Rays that never meet the floor are pinned here so their UV gradients stay
-// finite for the quad-wide derivative of the pixels that do hit it.
-const FLOOR_MAX_DISTANCE = 64.0;
+// Light balance. vgpu's wall draw exposes shadow floor 0.87, highlight
+// exposure 3.31 and ambient fill 0.42, but those feed its own HDR wall pass —
+// the numbers do not transfer to a shader with a different tone chain, and
+// taken literally the shadow only removed 13% and vanished. These are named
+// for what they do here and tuned against vgpu's rendered wall: the lit pools
+// sit a little above the #d2ccc2 base and the shadow core a little under it.
+const AMBIENT_FILL = 0.86;
+const HIGHLIGHT_GAIN = 0.30;
+/** How much light survives in the core of the cast shadow. */
+const SHADOW_FLOOR = 0.62;
 
+// The global light is a baked lightmap of window patches on vgpu's wall; the
+// pools below reproduce those procedurally. LIGHTMAP TRANSFER on that node
+// reads gamma 0.65, contrast 6.85, pivot 0.9 — a curve that lifts the midtones
+// and then rolls off, rather than the hard clamp a literal reading produced.
+const LIGHTMAP_GAMMA = 0.65;
+const LIGHTMAP_CONTRAST = 0.685;
+const LIGHTMAP_PIVOT = 0.45;
+
+// Every vec2f first, then the scalars: vec2f aligns to 8 bytes, so a scalar
+// sitting between two of them opens a padding hole that is easy to get wrong
+// on one side or the other. In this order the struct packs with none.
 struct Params {
   resolution: vec2f,
-  tanHalfFov: f32,
-  cameraPosition: vec3f,
-  cameraTarget: vec3f,
-  cameraUp: vec3f,
-  floorGrid: f32,
-  fractalScale: f32,
-  orbScale: f32,
-  sphereMix: f32,
-  glassAoScale: f32,
-  glassAoAmplitude: f32,
-  glassAoOpacity: f32,
-  fractalAoScale: f32,
-  fractalAoAmplitude: f32,
-  fractalAoOpacity: f32,
-  orbAoScale: f32,
-  orbAoAmplitude: f32,
-  orbAoOpacity: f32,
+  // Where the prism sits on the wall and how big it is, in aspect-corrected
+  // screen units. The shadow is cast from this rather than from depth: vgpu
+  // draws its own from a dedicated "analytic core and penumbra" mesh for the
+  // same reason — a soft, art-directable shadow rather than a hard one.
+  prismCenter: vec2f,
+  prismHalfExtent: vec2f,
+  shadowOffset: vec2f,
+  shadowSoftness: f32,
+  shadowOpacity: f32,
+  contactOpacity: f32,
 }
 @group(0) @binding(0) var<uniform> params: Params;
 @group(0) @binding(1) var wallMaterial: texture_2d<f32>;
@@ -67,112 +75,137 @@ struct VertexOut {
   return out;
 }
 
-fn cameraRay(uv: vec2f) -> vec3f {
-  let forward = normalize(params.cameraTarget - params.cameraPosition);
-  let right = normalize(cross(forward, params.cameraUp));
-  let up = normalize(cross(right, forward));
-  let aspect = params.resolution.x / max(params.resolution.y, 1.0);
-  var screen = uv * 2.0 - 1.0;
-  screen.y = -screen.y;
-  let localRay = normalize(vec3f(
-    screen.x * aspect * params.tanHalfFov,
-    screen.y * params.tanHalfFov,
-    -1.0,
-  ));
-  return normalize(mat3x3f(right, up, -forward) * localRay);
+/** Signed distance to the triangle through three points, negative inside. */
+fn triangleDistance(p: vec2f, a: vec2f, b: vec2f, c: vec2f) -> f32 {
+  let e0 = b - a;
+  let e1 = c - b;
+  let e2 = a - c;
+  let v0 = p - a;
+  let v1 = p - b;
+  let v2 = p - c;
+  let q0 = v0 - e0 * clamp(dot(v0, e0) / dot(e0, e0), 0.0, 1.0);
+  let q1 = v1 - e1 * clamp(dot(v1, e1) / dot(e1, e1), 0.0, 1.0);
+  let q2 = v2 - e2 * clamp(dot(v2, e2) / dot(e2, e2), 0.0, 1.0);
+  let winding = sign(e0.x * e2.y - e0.y * e2.x);
+  let d = min(
+    min(
+      vec2f(dot(q0, q0), winding * (v0.x * e0.y - v0.y * e0.x)),
+      vec2f(dot(q1, q1), winding * (v1.x * e1.y - v1.y * e1.x)),
+    ),
+    vec2f(dot(q2, q2), winding * (v2.x * e2.y - v2.y * e2.x)),
+  );
+  return -sqrt(d.x) * sign(d.y);
 }
 
-fn gridLine(coordinate: vec2f, spacing: f32, pixelFootprint: f32) -> f32 {
-  let gridCoordinate = coordinate / spacing;
-  let distanceToLine = abs(fract(gridCoordinate - 0.5) - 0.5);
-  let distance = min(distanceToLine.x, distanceToLine.y);
-  let width = clamp(pixelFootprint / spacing, 0.0005, 0.45);
-  return 1.0 - smoothstep(width * 0.35, width, distance);
+/**
+ * The prism's silhouette, as the triangle inscribed in its projected box.
+ *
+ * Placing an equilateral triangle by its centroid instead put the shadow a
+ * sixth of its height too high and made it wider than the shape casting it;
+ * the box is what the projection actually measured, so the silhouette is
+ * built from it directly.
+ */
+fn prismSilhouette(point: vec2f, center: vec2f) -> f32 {
+  let half = max(params.prismHalfExtent, vec2f(0.0001));
+  return triangleDistance(
+    point,
+    center + vec2f(0.0, half.y),
+    center + vec2f(-half.x, -half.y),
+    center + vec2f(half.x, -half.y),
+  );
+}
+
+/**
+ * The prism's shadow on the wall. vgpu splits this into a core and a penumbra;
+ * the same two terms fall out of widening the silhouette twice — a tight dark
+ * core, and a broad wash that reaches much further and carries the softness.
+ */
+fn prismShadow(wallPoint: vec2f) -> f32 {
+  let distance = prismSilhouette(
+    wallPoint,
+    params.prismCenter + params.shadowOffset,
+  );
+  let softness = max(params.shadowSoftness, 0.0001);
+  let core = 1.0 - smoothstep(0.0, softness, distance);
+  let penumbra = 1.0 - smoothstep(
+    -params.prismHalfExtent.x * 0.2,
+    softness * 3.6,
+    distance,
+  );
+  return clamp(
+    (core + penumbra * 0.55) * params.shadowOpacity,
+    0.0,
+    1.0,
+  );
+}
+
+/**
+ * Occlusion where the prism nearly meets the wall. Unlike the cast shadow this
+ * one is not offset — it hugs the silhouette, which is what stops the shape
+ * reading as a sticker laid on flat paint.
+ */
+fn contactOcclusion(wallPoint: vec2f) -> f32 {
+  let distance = prismSilhouette(wallPoint, params.prismCenter);
+  let reach = max(params.prismHalfExtent.x, 0.0001) * 0.85;
+  return (1.0 - smoothstep(0.0, reach, distance)) * params.contactOpacity;
+}
+
+/** One broad, soft pool, weighted per axis so it reads as a window. */
+fn pool(wallPoint: vec2f, center: vec2f, shape: vec2f, falloff: f32) -> f32 {
+  let d = (wallPoint - center) * shape;
+  return exp(-dot(d, d) * falloff);
+}
+
+/**
+ * Broad window light on the wall: a near pool and a weaker far one, put
+ * through the same gamma/contrast/pivot transfer vgpu applies to its baked
+ * lightmap.
+ */
+fn globalLight(wallPoint: vec2f) -> f32 {
+  let pooled = clamp(
+    pool(wallPoint, vec2f(-0.62, 0.30), vec2f(1.05, 1.50), 1.50) * 0.85 +
+      pool(wallPoint, vec2f(0.52, -0.42), vec2f(0.85, 1.25), 1.15) * 0.55,
+    0.0,
+    1.0,
+  );
+  let shaped = pow(pooled, LIGHTMAP_GAMMA);
+  // Contrast about the pivot, the way that transfer curve bends.
+  return clamp(
+    LIGHTMAP_PIVOT + (shaped - LIGHTMAP_PIVOT) * (1.0 + LIGHTMAP_CONTRAST),
+    0.0,
+    1.0,
+  );
 }
 
 @fragment fn fs_main(in: VertexOut) -> @location(0) vec4f {
   let uv = in.position.xy / max(params.resolution, vec2f(1.0));
-  let ro = params.cameraPosition;
-  let rd = cameraRay(uv);
-  // A broad window pool anchored above the top-right corner, fading out before
-  // the bottom edge. `uv.y` is 0 at the top, so the centre sits just off-screen
-  // above the canvas, the way the light falls on vgpu.sh's own wall.
-  let cornerDistance = length(vec2f(
-    (uv.x - 0.78) * 0.85,
-    (uv.y + 0.10) * 1.15,
-  ));
-  let lightPool = 1.0 - smoothstep(0.08, 1.0, cornerDistance);
-  let wallTint = WALL_COLOR * mix(WALL_LIGHT_FALLOFF, WALL_LIGHT_PEAK, lightPool);
-  // Aspect-corrected so the plaster never stretches with the viewport.
-  let wallUv = vec2f(
-    uv.x * params.resolution.x / max(params.resolution.y, 1.0),
-    uv.y,
-  ) * WALL_SCREEN_SCALE;
-  let backdrop = shadeWall(
+  let aspect = params.resolution.x / max(params.resolution.y, 1.0);
+  // Aspect-corrected wall coordinates, centred on the canvas and y-up, so the
+  // plaster never stretches and the prism's footprint lands where the camera
+  // projected it.
+  let wallPoint = vec2f((uv.x - 0.5) * aspect, 0.5 - uv.y);
+
+  let wallUv = wallPoint * WALL_SCREEN_SCALE;
+  let wallUvDx = dpdx(wallUv);
+  let wallUvDy = dpdy(wallUv);
+
+  let light = globalLight(wallPoint);
+  let shadow = prismShadow(wallPoint);
+  let contact = contactOcclusion(wallPoint);
+  // Light balance in vgpu's terms: the global light is exposed up, the shadow
+  // and contact terms take it back down, and the ambient fill keeps the
+  // deepest part of the shadow off black.
+  let exposure = AMBIENT_FILL + light * HIGHLIGHT_GAIN;
+  let occlusion = mix(1.0, SHADOW_FLOOR, clamp(shadow + contact, 0.0, 1.0));
+  let wallTint = WALL_COLOR * exposure * occlusion;
+
+  let wall = shadeWall(
     wallUv,
-    dpdx(wallUv),
-    dpdy(wallUv),
+    wallUvDx,
+    wallUvDy,
     wallTint,
     wallMaterial,
     wallSampler,
   ).color;
-
-  // The floor plane is intersected unconditionally so its UV gradients can be
-  // taken here, in uniform control flow — `dpdx`/`dpdy` and the sampling they
-  // feed are undefined once the shader is inside the ray-hit branch below.
-  // Rays that travel up or away are pinned to a grazing hit far down the
-  // plane, which is the same coarse mip the horizon wants anyway, and their
-  // colour is discarded.
-  let floorDenominator = min(rd.y, -0.0001);
-  let floorT = (HERO_FLOOR_Y - ro.y) / floorDenominator;
-  let floorPoint = ro + rd * clamp(floorT, 0.0, FLOOR_MAX_DISTANCE);
-  let floorUv = floorPoint.xz / WALL_WORLD_SCALE;
-  let floorUvDx = dpdx(floorUv);
-  let floorUvDy = dpdy(floorUv);
-
-  if (rd.y < -0.0001) {
-    if (floorT > 0.0) {
-      let floorAoSettings = HeroFloorAoSettings(
-        params.glassAoScale,
-        params.glassAoAmplitude,
-        params.glassAoOpacity,
-        params.fractalAoScale,
-        params.fractalAoAmplitude,
-        params.fractalAoOpacity,
-        params.orbAoScale,
-        params.orbAoAmplitude,
-        params.orbAoOpacity,
-      );
-      let floorAo = heroFloorAo(
-        floorPoint.xz,
-        params.fractalScale,
-        params.orbScale,
-        params.sphereMix,
-        floorAoSettings,
-      );
-      // The floor is the same plaster seen in perspective, so it takes world
-      // coordinates rather than the backdrop's screen-space projection.
-      var floorColor = shadeWall(
-        floorUv,
-        floorUvDx,
-        floorUvDy,
-        wallTint,
-        wallMaterial,
-        wallSampler,
-      ).color;
-      if (params.floorGrid > 0.5) {
-        let pixelFootprint = max(
-          floorT * params.tanHalfFov * 3.2 / max(params.resolution.y, 1.0),
-          0.0001,
-        );
-        let minor = gridLine(floorPoint.xz, 0.25, pixelFootprint) * 0.62;
-        let major = gridLine(floorPoint.xz, 1.0, pixelFootprint) * 0.90;
-        let grid = max(minor, major);
-        floorColor = mix(floorColor, vec3f(0.035), grid);
-      }
-      let presentedFloor = presentCeramic(floorColor);
-      return vec4f(presentedFloor.rgb * floorAo, presentedFloor.a);
-    }
-  }
-  return presentCeramic(backdrop);
+  return presentCeramic(wall);
 }

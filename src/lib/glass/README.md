@@ -8,9 +8,10 @@ Vendored from vgpu's `glass-fractal` example (vercel-labs/vgpu, MIT — see
   `activeInterior` picks which one renders. Models draw with one instance;
   only vgpu's own fractal uses the four tetrahedral face instances. Each model
   also gets an `InteriorFit`: vgpu's fractal is authored in the tetrahedron's
-  own frame, but the glass stands on the floor rather than sitting on the
-  origin, so a mesh centred on its own bounds and scaled to fill the prism
-  hangs out through the base. `createCameraControls` gained `focus` (pan) and
+  own frame, but the glass is not centred on the world origin, so a mesh
+  centred on its own bounds and scaled to fill the prism hangs out through the
+  base. Models also turn to follow the cursor, which the camera's few degrees
+  of parallax never read as. `createCameraControls` gained `focus` (pan) and
   `distanceScale` (dolly), which is how each page frames the prism now that
   the canvas is the whole viewport.
 - **`renderer.ts`** — added `setState()`, which morphs the current shape out to
@@ -19,7 +20,13 @@ Vendored from vgpu's `glass-fractal` example (vercel-labs/vgpu, MIT — see
   layout stacks. The lil-gui tuning panel was removed.
 - **`settings.ts`** — `sphereMix` defaults to 1 so the page opens on the orb.
 - **`hero-fractal-background-draw.wgsl`** — the neutral studio backdrop became
-  vgpu's beige wall, lit by a window pool anchored above the top-right corner.
+  vgpu's beige wall: a flat back wall lit by window pools, with the prism's
+  cast shadow and contact occlusion on it. It used to raymarch a horizontal
+  plane, which read as a floor the prism stood on — the plaster rushed away
+  toward a horizon and the shape sat in a contact pool. The prism floats in
+  front of the wall now, and `HERO_FRACTAL_CAMERA` looks level at it rather
+  than down onto it.
+- **`hero-prism-caustic.wgsl`** (ours) — vgpu's caustic pass. See below.
 - **`hero-glass-assets-core.ts`** — `decodeMesh` is exported so `models.ts` can
   decode the generated model meshes.
 
@@ -37,6 +44,28 @@ Vendored from vgpu's `glass-fractal` example (vercel-labs/vgpu, MIT — see
   failure, not a visual glitch; `npm run check:shaders` catches it.
 
 `models.ts` is ours: the state list, lazy mesh loading and prefetch.
+
+## The spectral beam
+
+`hero-prism-caustic.wgsl` is vgpu's caustic pass, which the coming-soon pages
+run and the landing page does not — they hold a platform in the glass instead,
+and the beam would fight it. It draws additively in the same order vgpu's
+backdrop pass does: wall, cast shadow, exterior light, glass back faces,
+internal light.
+
+vgpu traces a 92,160-vertex spectral mesh — 128 wavelengths by 24 beam slices —
+through the glass and rasterises it. Ours solves the same refraction
+analytically in the wall plane, which is where the light lands and the only
+place the effect is seen. Two wavelengths are traced, not 128: red and violet
+bound the fan and every wavelength between them arrives between their exit
+rays, so a pixel's angle inside that wedge is its wavelength. That turns a loop
+over the spectrum into one lookup and gives a continuous rainbow rather than
+128 slices.
+
+Three of vgpu's numbers do not survive the move and the shader says why at each
+one: its beam width is in its own beam-space, its Cauchy B puts violet past the
+critical angle so the fan collapses to white, and its -35..75 degree pointer
+range spans total internal reflection at our apex angle.
 
 The canvas is the page's wall. It covers the viewport behind the content on
 every page that shows the prism, so the plaster the shader lights is the same

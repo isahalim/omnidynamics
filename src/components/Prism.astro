@@ -16,6 +16,12 @@ interface Props {
    * vertical, so this is how a page sets the prism's share of the wall.
    */
   distance?: number;
+  /**
+   * Draws the spectral beam through the prism and leaves the glass empty —
+   * vgpu's own light hero. The landing page holds a platform in the glass
+   * instead, so it takes every other effect but this one.
+   */
+  beam?: boolean;
 }
 
 const {
@@ -23,6 +29,7 @@ const {
   picker = true,
   focus = 0,
   distance = 1.45,
+  beam = false,
 } = Astro.props;
 ---
 
@@ -39,6 +46,7 @@ const {
   data-initial={initial}
   data-focus={focus}
   data-distance={distance}
+  data-beam={beam ? "" : null}
 >
   {/* Click surface: the shape fills the middle of the viewport. */}
   {picker && (
@@ -229,9 +237,12 @@ const {
   const focus = Number(stage.dataset.focus ?? 0) || 0;
   const wide = window.matchMedia("(min-width: 56rem)");
   const focusFor = () => (wide.matches ? focus : 0);
+  const beam = stage.dataset.beam !== undefined;
   const renderer = createRenderer({
     canvas,
     framing: { focus: focusFor(), distanceScale },
+    caustics: beam,
+    interior: !beam,
   });
   if (focus !== 0) {
     wide.addEventListener("change", () => renderer.setFocus(focusFor()));

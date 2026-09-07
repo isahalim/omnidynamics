@@ -47,7 +47,7 @@ const BLURB: Record<string, string> = {
       {/* The canvas is the viewport, so the prism is panned right rather than
           placed in a column; this side just reserves the room it needs. */}
       <div class="art" aria-hidden="true">
-        <Prism initial={state.id} picker={false} focus={-0.42} />
+        <Prism picker={false} focus={-0.42} beam />
       </div>
     </main>
   </div>

@@ -32,11 +32,18 @@ export interface HeroFractalGlass {
 
 export const HERO_FRACTAL_CAMERA = {
   cameraRotation: [0, 0, 0],
-  cameraDistance: [5.44, 1.33, 0.55],
-  cameraTarget: [0, 0.16, 0],
+  // Level with the prism. The old vector looked down onto the shape from
+  // 14 degrees up, which is what made the backdrop read as a floor it stood
+  // on; the wall behind it wants a camera looking straight at it.
+  cameraDistance: [5.6, 0, 0],
+  // The glass mesh stands on y = -0.333 and reaches y = 0.983, so its middle
+  // is the height to look at.
+  cameraTarget: [0, 0.325, 0],
   fov: 20,
-  maxMouseRotation: 5,
-  mouseLerp: 0.02,
+  // vgpu's prism swings noticeably under the cursor. 5 degrees at a lerp of
+  // 0.02 was imperceptible.
+  maxMouseRotation: 9,
+  mouseLerp: 0.09,
 } satisfies HeroFractalCamera;
 export const HERO_FRACTAL_MATERIAL = {
   baseColor: [71 / 255, 71 / 255, 71 / 255],
