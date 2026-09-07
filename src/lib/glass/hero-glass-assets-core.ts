@@ -3,6 +3,17 @@ import { geometry } from "vgpu";
 import type { Texture } from "vgpu/core";
 import { createSampler, cubeView } from "vgpu/core";
 
+import { prismMeshData } from "../prism/geometry";
+
+/**
+ * Scales vgpu's cross-section to the world the landing camera frames: the same
+ * height the old tetrahedron had, so the camera, the shadow footprint and the
+ * interior fitting all keep their tuning.
+ */
+const GLASS_PRISM_SCALE = 2.666;
+/** Stands it on y = -0.333 and centres the extrusion on z = 0. */
+const GLASS_PRISM_OFFSET = [0, 0.10565, -0.43989] as const;
+
 const MESH_HEADER_SIZE = 40;
 const CUBEMAP_COLUMNS = 3;
 const CUBEMAP_ROWS = 2;
@@ -32,12 +43,11 @@ export interface RgbaAtlas {
 /** Environment-neutral mesh decoding and cubemap upload used by browser and Node. */
 export function createHeroGlassAssets(
   gpu: Gpu,
-  glassMeshBuffer: ArrayBuffer,
   fractalMeshBuffer: ArrayBuffer,
   atlas: RgbaAtlas,
   wallAtlas: RgbaAtlas
 ): HeroGlassAssets {
-  const glassMesh = decodeMesh(gpu, glassMeshBuffer, "glass-pyramid");
+  const glassMesh = createGlassPrismGeometry(gpu);
   let fractalMesh: ReturnType<typeof decodeMesh> | undefined;
   let environment: Texture | undefined;
   try {
@@ -370,4 +380,82 @@ function destroyAll(resources: readonly (object | undefined)[]): void {
     }
   }
   if (failed) throw failure;
+}
+
+/**
+ * Builds the landing page's glass as a rounded triangular prism — two triangular
+ * faces and three rectangular ones — from the same cross-section the light
+ * pipeline extrudes.
+ *
+ * vgpu authors the shape in its own units; this scales it to the world the
+ * landing camera already frames (standing on y = -0.333, apex just under y = 1)
+ * and centres it on z = 0, then packs it into the HGP1 layout the glass shaders
+ * read. Building it here rather than shipping a `.mesh` keeps one definition of
+ * the shape for both pipelines.
+ */
+export function createGlassPrismGeometry(gpu: Gpu) {
+  const { vertices, indices } = prismMeshData();
+  const positions = new Float32Array(vertices.length / 2);
+  const normals = new Float32Array(vertices.length / 2);
+  const min: [number, number, number] = [Infinity, Infinity, Infinity];
+  const max: [number, number, number] = [-Infinity, -Infinity, -Infinity];
+  for (let vertex = 0; vertex * 6 < vertices.length; vertex++) {
+    for (let axis = 0; axis < 3; axis++) {
+      const value =
+        vertices[vertex * 6 + axis]! * GLASS_PRISM_SCALE + GLASS_PRISM_OFFSET[axis]!;
+      positions[vertex * 3 + axis] = value;
+      normals[vertex * 3 + axis] = vertices[vertex * 6 + 3 + axis]!;
+      min[axis] = Math.min(min[axis]!, value);
+      max[axis] = Math.max(max[axis]!, value);
+    }
+  }
+
+  const count = positions.length / 3;
+  const data = new Uint8Array(count * 16);
+  const view = new DataView(data.buffer);
+  const span = [0, 1, 2].map((axis) => max[axis]! - min[axis]! || 1);
+  const unorm = (value: number) => Math.round(Math.min(1, Math.max(0, value)) * 65535);
+  const snorm = (value: number) => Math.round(Math.min(1, Math.max(-1, value)) * 32767);
+  for (let vertex = 0; vertex < count; vertex++) {
+    const offset = vertex * 16;
+    for (let axis = 0; axis < 3; axis++) {
+      view.setUint16(
+        offset + axis * 2,
+        unorm((positions[vertex * 3 + axis]! - min[axis]!) / span[axis]!),
+        true
+      );
+      view.setInt16(offset + 8 + axis * 2, snorm(normals[vertex * 3 + axis]!), true);
+    }
+    view.setUint16(offset + 6, 65535, true); // occlusion: the glass shell has none
+    view.setInt16(offset + 14, 0, true);
+  }
+
+  const buffers: GeometryBufferOptions[] = [
+    {
+      data,
+      stride: 16,
+      attributes: { packed_position: "unorm16x4", packed_normal: "snorm16x4" },
+    },
+  ];
+  const solid = geometry(gpu, {
+    label: "homepage-light-glass-prism",
+    buffers,
+    indices: padTriangleIndices(indices),
+  });
+  try {
+    return {
+      geometry: solid,
+      wireframeGeometry: geometry(gpu, {
+        label: "homepage-light-glass-prism-wireframe",
+        topology: "line-list",
+        buffers,
+        indices: triangleEdges(indices),
+      }),
+      meshMin: min as readonly [number, number, number],
+      meshMax: max as readonly [number, number, number],
+    };
+  } catch (error) {
+    solid.destroy();
+    throw error;
+  }
 }

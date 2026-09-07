@@ -1,0 +1,88 @@
+---
+/**
+ * vgpu's light pipeline as this site's backdrop.
+ *
+ * The canvas is the page's wall, not a picture hung on it: it covers the whole
+ * viewport behind the content, so the plaster the shader lights is the same
+ * plaster the copy sits on. `frame` names an element the prism is fitted into,
+ * which is how a page seats the glass beside its copy without splitting the
+ * wall into columns.
+ */
+interface Props {
+  /** Selector for the box the prism is fitted to. Omit to centre it. */
+  frame?: string;
+}
+const { frame = "" } = Astro.props;
+---
+
+<canvas id="prism" class="wall" data-frame={frame || null} aria-hidden="true"></canvas>
+<p id="prism-status" class="status" role="status" aria-live="polite"></p>
+
+<style>
+  .wall {
+    position: fixed;
+    inset: 0;
+    /* Behind everything in the page's stacking context, but above the flat
+       plaster colour the body paints while the GPU wall comes up. */
+    z-index: -1;
+    display: block;
+    inline-size: 100%;
+    block-size: 100%;
+    touch-action: none;
+    opacity: 0;
+    transition: opacity 0.6s ease;
+  }
+  .wall.ready { opacity: 1; }
+
+  .status {
+    position: fixed;
+    inset-block-end: 1.25rem;
+    inset-inline-start: 50%;
+    translate: -50% 0;
+    margin: 0;
+    font-size: 0.75rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgb(255 255 255 / 0.72);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+  .status.on { opacity: 1; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .wall, .status { transition: none; }
+  }
+</style>
+
+<script>
+  import { createPrismRenderer } from "../lib/prism/renderer";
+
+  const canvas = document.getElementById("prism") as HTMLCanvasElement | null;
+  const status = document.getElementById("prism-status");
+  if (!canvas || !status) throw new Error("prism markup missing");
+
+  const selector = canvas.dataset.frame;
+  const frame = selector
+    ? document.querySelector<HTMLElement>(selector) ?? undefined
+    : undefined;
+
+  const say = (message: string) => {
+    status.textContent = message;
+    status.classList.toggle("on", message !== "");
+  };
+
+  if (!("gpu" in navigator)) {
+    say("This page needs WebGPU");
+  } else {
+    const renderer = createPrismRenderer({ canvas, frame });
+    renderer.ready.then(
+      () => canvas.classList.add("ready"),
+      // A silent canvas is the worst failure mode, so surface it.
+      (error: unknown) => {
+        say("The prism could not start");
+        console.error("prism renderer failed", error);
+      }
+    );
+    window.addEventListener("pagehide", () => renderer.dispose(), { once: true });
+  }
+</script>

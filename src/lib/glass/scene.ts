@@ -101,20 +101,20 @@ export interface InteriorEntry {
  * The room a model interior is fitted into, as half-extents around the orb's
  * centre.
  *
- * The glass is not centred on the world origin: the tetrahedron stands on the
- * floor at y = -0.333 with its apex at y = 0.983, so a mesh centred on its own
- * bounds and scaled to fill the prism hangs out through the base — which is
- * what the humanoid did. The space inside is neither symmetric nor a sphere,
- * so a single radius either clips the tall meshes or shrinks the wide ones to
- * a smudge; these are per-axis limits, checked against all four models on the
- * rendered page. Height is the generous axis because the tetrahedron is
- * tallest through its middle, where the shapes sit.
+ * The glass is not centred on the world origin: the prism stands on the floor
+ * at y = -0.333 with its apex at y = 0.983, so a mesh centred on its own bounds
+ * and scaled to fill it hangs out through the base — which is what the humanoid
+ * did. The space inside is neither symmetric nor a sphere, so a single radius
+ * either clips the tall meshes or shrinks the wide ones to a smudge; these are
+ * per-axis limits, checked against all four models on the rendered page. The
+ * triangular cross-section binds hardest across the base, and the extrusion is
+ * the roomiest axis, which is what sets the order below.
  *
  * Fitting here also keeps the swap through the orb invisible: whichever mesh
  * is loaded, the placement below resolves to exactly the orb's transform at
  * full morph.
  */
-const INTERIOR_HALF_EXTENTS = [0.34, 0.38, 0.34] as const;
+const INTERIOR_HALF_EXTENTS = [0.29, 0.32, 0.33] as const;
 
 /**
  * How far a model interior turns to follow the cursor, in radians.

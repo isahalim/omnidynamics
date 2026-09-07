@@ -15,25 +15,29 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 
 const run = promisify(execFile);
-const SHADER_DIR = "src/lib/glass";
+const SHADER_DIRS = ["src/lib/glass", "src/lib/prism"];
 const BINARY = join("node_modules", ".bin", "vgpu");
 
-const shaders = readdirSync(SHADER_DIR)
-  .filter((name) => name.endsWith(".wgsl"))
-  .sort();
+const shaders = SHADER_DIRS.flatMap((dir) =>
+  readdirSync(dir)
+    .filter((name) => name.endsWith(".wgsl"))
+    .map((name) => join(dir, name))
+).sort();
 
-const entries = shaders.filter((name) =>
-  /@group\s*\(/.test(readFileSync(join(SHADER_DIR, name), "utf8"))
+// Entries are the shaders that declare bindings; the rest are pure modules,
+// which vgpu validates transitively as part of each entry that imports them.
+const entries = shaders.filter((path) =>
+  /@group\s*\(/.test(readFileSync(path, "utf8"))
 );
 
 if (entries.length === 0) {
-  console.error("No WGSL entry points found — did the shader directory move?");
+  console.error("No WGSL entry points found — did the shader directories move?");
   process.exit(1);
 }
 
 const results = await Promise.all(
-  entries.map(async (name) => {
-    const path = join(SHADER_DIR, name);
+  entries.map(async (path) => {
+    const name = path;
     try {
       const { stdout } = await run(BINARY, ["check", path, "--require-validation"]);
       const { validation } = JSON.parse(stdout);
