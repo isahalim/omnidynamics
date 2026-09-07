@@ -5,9 +5,9 @@ import {
   ENVIRONMENT_TEXEL_ANGLE,
   PRISM_BACK_Z,
   PRISM_CAUSTIC_TUNING,
-  PRISM_CENTROID,
   PRISM_FRONT_Z,
   PRISM_GLASS,
+  PRISM_GROUNDING,
   PRISM_LIGHT_FADE,
   PRISM_LIGHT_MODE,
   PRISM_LIGHT_PLANE_Z,
@@ -17,6 +17,8 @@ import {
   PRISM_WALL_COLOR,
   PRISM_WALL_LIGHT_DIRECTION,
   PRISM_WALL_TUNING,
+  PYRAMID_GROUNDING,
+  type PrismGrounding,
   type Vec2,
   type Vec3,
 } from "./constants";
@@ -26,6 +28,19 @@ import { LIGHT_INTERNAL_SEGMENTS } from "./light-mesh";
 
 const ENVIRONMENT_ROTATION = rotationMatrix(PRISM_GLASS.environmentRotation);
 const PRISM_PLANES = prismPlanes();
+
+/**
+ * What the wall needs to know about which solid stands in front of it: where
+ * its baked contact shadow and occlusion sit on the plaster, and how wide that
+ * bake is. The coming-soon pages use the prism's; the landing page's pyramid
+ * has its own silhouette.
+ */
+export interface PrismShape {
+  readonly grounding: PrismGrounding;
+}
+
+export const PRISM_SHAPE: PrismShape = { grounding: PRISM_GROUNDING };
+export const PYRAMID_SHAPE: PrismShape = { grounding: PYRAMID_GROUNDING };
 
 function hexToRgb(hex: string): Vec3 {
   const match = /^#?([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(hex);
@@ -50,14 +65,20 @@ export interface FrameState {
   readonly beamWidthReveal: number;
 }
 
-export function lightWallUniforms(state: FrameState) {
+/** The wall needs only these two of a frame's numbers. */
+export interface WallFrame {
+  readonly viewProjection: Float32Array;
+  readonly wallHalfExtent: Vec2;
+}
+
+export function lightWallUniforms(state: WallFrame, shape: PrismShape = PRISM_SHAPE) {
   const wall = PRISM_LIGHT_MODE.wall;
   const tuning = PRISM_WALL_TUNING;
   return {
     viewProjection: state.viewProjection,
     wallHalfExtent: state.wallHalfExtent,
     wallColor: WALL_COLOR_RGB,
-    prismCenter: PRISM_CENTROID,
+    prismCenter: shape.grounding.center,
     lightDirection: PRISM_WALL_LIGHT_DIRECTION,
     materialWorldScale: PRISM_SIDE * tuning.materialScale,
     normalStrength: tuning.normalStrength * wall.normalStrength,
@@ -73,16 +94,23 @@ export function lightWallUniforms(state: FrameState) {
     // The analytic shadow mesh owns the cast shadow; the mask only supplies AO.
     prismShadowStrength: 0,
     prismAoStrength: tuning.prismAoStrength,
-    groundingScale: PRISM_SIDE * tuning.groundingScale,
+    groundingScale: shape.grounding.scale,
   };
 }
 
-export function prismShadowUniforms(viewProjection: Float32Array) {
+export function prismShadowUniforms(
+  viewProjection: Float32Array,
+  shadow: {
+    readonly color: Vec3;
+    readonly opacity: number;
+    readonly farStrength: number;
+  } = PRISM_SHADOW
+) {
   return {
     viewProjection,
-    color: PRISM_SHADOW.color,
-    opacity: PRISM_SHADOW.opacity,
-    farStrength: PRISM_SHADOW.farStrength,
+    color: shadow.color,
+    opacity: shadow.opacity,
+    farStrength: shadow.farStrength,
   };
 }
 
@@ -130,22 +158,23 @@ export function lightCausticUniforms() {
 }
 
 export function glassUniforms(state: FrameState) {
-  const ior = Math.fround(PRISM_GLASS.ior);
+  const glass = PRISM_GLASS;
+  const ior = Math.fround(glass.ior);
   const f0 = Math.fround(Math.fround(ior - 1) / Math.fround(ior + 1));
   return {
     viewProjection: state.viewProjection,
     environmentRotation: ENVIRONMENT_ROTATION,
     cameraPosition: state.cameraPosition,
-    absorption: PRISM_GLASS.absorption,
+    absorption: glass.absorption,
     prismA: PRISM_TRIANGLE.a,
     prismB: PRISM_TRIANGLE.b,
     prismC: PRISM_TRIANGLE.c,
     environmentSize: ENVIRONMENT_SIZE,
     frontZ: PRISM_FRONT_Z,
     backZ: PRISM_BACK_Z,
-    ior: PRISM_GLASS.ior,
-    reflectionStrength: PRISM_GLASS.reflectionStrength,
-    environmentExposure: PRISM_GLASS.environmentExposure,
+    ior: glass.ior,
+    reflectionStrength: glass.reflectionStrength,
+    environmentExposure: glass.environmentExposure,
     environmentDebug: 0,
     environmentTexelAngle: ENVIRONMENT_TEXEL_ANGLE,
     fresnelF0: Math.fround(f0 * f0),

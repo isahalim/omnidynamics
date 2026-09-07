@@ -2,6 +2,7 @@ import type { Gpu } from "vgpu";
 
 import {
   createHeroGlassAssets,
+  createStudioCubemap,
   type HeroGlassAssets,
 } from "./hero-glass-assets-core";
 export type { HeroGlassAssets } from "./hero-glass-assets-core";
@@ -9,6 +10,20 @@ export type { HeroGlassAssets } from "./hero-glass-assets-core";
 const FRACTAL_MESH_URL = "/glass/fractal-tetrahedron-l7.mesh";
 const ENVIRONMENT_URL = "/glass/studio-cubemap-prefiltered.png";
 const WALL_URL = "/glass/wall-material.png";
+
+/** Just the studio, for a page that brings its own wall and its own glass. */
+export async function loadStudioCubemap(gpu: Gpu, signal?: AbortSignal) {
+  const response = await fetch(ENVIRONMENT_URL, { signal });
+  if (!response.ok)
+    throw new Error(`Failed to load ${ENVIRONMENT_URL}: HTTP ${response.status}`);
+  const bitmap = await createImageBitmap(await response.blob());
+  try {
+    signal?.throwIfAborted();
+    return createStudioCubemap(gpu, readPixels(bitmap));
+  } finally {
+    bitmap.close();
+  }
+}
 
 /** Browser asset adapter: fetch + createImageBitmap, with GPU decoding shared with Node. */
 export async function loadHeroGlassAssets(

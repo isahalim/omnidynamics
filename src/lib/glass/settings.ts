@@ -63,7 +63,7 @@ export const HERO_ORB_MATERIAL = {
 export const HERO_FRACTAL_GLASS = {
   fractalScale: 0.72,
   orbScale: 0.6,
-  orbOffsetY: 0.10565,
+  orbOffsetY: 0.08,
   sphereMix: 1, // the page opens on the orb
   ior: 1.149,
   reflectionStrength: 0.71,

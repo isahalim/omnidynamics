@@ -28,6 +28,23 @@ const normalize = (v: Vec3): Vec3 => {
   return [v[0] / length, v[1] / length, v[2] / length];
 };
 
+/**
+ * Where a page's camera sits on its orbit, and how far the pointer swings it.
+ * The light pipeline looks straight down its own axis; the landing page takes
+ * the raised, slightly turned view vgpu frames its glass-fractal example at.
+ */
+export interface CameraOrientation {
+  readonly yawDegrees: number;
+  readonly pitchDegrees: number;
+  readonly orbitDegrees: number;
+}
+
+export const PRISM_ORIENTATION: CameraOrientation = {
+  yawDegrees: CAMERA_YAW_DEGREES,
+  pitchDegrees: CAMERA_PITCH_DEGREES,
+  orbitDegrees: CAMERA_ORBIT_DEGREES,
+};
+
 export interface PrismView {
   readonly viewProjection: Float32Array;
   readonly position: Vec3;
@@ -41,10 +58,11 @@ export function cameraView(
   orbitX = 0,
   orbitY = 0,
   distance = CAMERA_DISTANCE,
-  fov = CAMERA_FOV_DEGREES
+  fov = CAMERA_FOV_DEGREES,
+  orientation: CameraOrientation = PRISM_ORIENTATION
 ): PrismView {
-  const yaw = radians(CAMERA_YAW_DEGREES + clamp(orbitX, -1, 1) * CAMERA_ORBIT_DEGREES);
-  const pitch = radians(CAMERA_PITCH_DEGREES - clamp(orbitY, -1, 1) * CAMERA_ORBIT_DEGREES);
+  const yaw = radians(orientation.yawDegrees + clamp(orbitX, -1, 1) * orientation.orbitDegrees);
+  const pitch = radians(orientation.pitchDegrees - clamp(orbitY, -1, 1) * orientation.orbitDegrees);
   const cosPitch = Math.cos(pitch);
   const position: Vec3 = [
     Math.sin(yaw) * cosPitch * distance,
@@ -78,12 +96,13 @@ export function cameraView(
 export function wallHalfHeight(
   aspect: number,
   distance = CAMERA_DISTANCE,
-  fov = CAMERA_FOV_DEGREES
+  fov = CAMERA_FOV_DEGREES,
+  orientation: CameraOrientation = PRISM_ORIENTATION
 ): number {
   let reach = 0;
   for (const orbitX of [-1, 0, 1]) {
     for (const orbitY of [-1, 0, 1]) {
-      const view = cameraView(aspect, orbitX, orbitY, distance, fov);
+      const view = cameraView(aspect, orbitX, orbitY, distance, fov, orientation);
       const tangent = Math.tan(radians(fov) / 2);
       for (const x of [-1, 1]) {
         for (const y of [-1, 1]) {
@@ -108,9 +127,10 @@ export function wallHalfHeight(
 export function wallExtent(
   aspect: number,
   distance = CAMERA_DISTANCE,
-  fov = CAMERA_FOV_DEGREES
+  fov = CAMERA_FOV_DEGREES,
+  orientation: CameraOrientation = PRISM_ORIENTATION
 ): Vec2 {
-  const half = wallHalfHeight(aspect, distance, fov);
+  const half = wallHalfHeight(aspect, distance, fov, orientation);
   return [half * aspect, half];
 }
 

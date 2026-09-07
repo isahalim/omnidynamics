@@ -6,7 +6,12 @@
  * projection so it lands in it. That keeps the wall a single full-bleed plane —
  * the copy sits on the same lit plaster the glass stands on.
  */
-import { cameraView, wallExtent } from "./camera";
+import {
+  PRISM_ORIENTATION,
+  cameraView,
+  wallExtent,
+  type CameraOrientation,
+} from "./camera";
 import { CAMERA_FOV_DEGREES, PRISM_FRONT_Z, type Vec2 } from "./constants";
 import { prismMeshPositions } from "./geometry";
 
@@ -34,7 +39,7 @@ interface Bounds {
 
 const MIN_DISTANCE = PRISM_FRONT_Z + 0.1;
 const MAX_DISTANCE = 32;
-const MESH_POSITIONS = prismMeshPositions();
+const PRISM_POSITIONS = prismMeshPositions();
 
 export function applyProjectionFraming(
   matrix: Float32Array,
@@ -64,14 +69,18 @@ export function framedWallExtent(
   aspect: number,
   distance: number,
   framing: ProjectionFraming,
-  fov = CAMERA_FOV_DEGREES
+  fov = CAMERA_FOV_DEGREES,
+  orientation: CameraOrientation = PRISM_ORIENTATION
 ): Vec2 {
-  const extent = wallExtent(aspect, distance, fov);
+  const extent = wallExtent(aspect, distance, fov, orientation);
   const coverage = framingCoverage(framing);
   return [extent[0] * coverage[0], extent[1] * coverage[1]];
 }
 
-function projectedBounds(matrices: Float32Array[], points: [number, number, number][]): Bounds {
+function projectedBounds(
+  matrices: Float32Array[],
+  points: readonly [number, number, number][]
+): Bounds {
   let x0 = Infinity;
   let y0 = Infinity;
   let x1 = -Infinity;
@@ -96,23 +105,27 @@ const fits = (bounds: Bounds, viewport: FramingViewport) =>
   bounds.y1 - bounds.y0 <= (viewport.bottom - viewport.top) * 2;
 
 /**
- * The nearest distance at which the prism fits `viewport`, and the projection
- * shift that centres it there. Bounds are taken across the whole parallax range,
- * so the shape never drifts out of its box under the pointer.
+ * The nearest distance at which `positions` fit `viewport`, and the projection
+ * shift that centres them there. Bounds are taken across the whole parallax
+ * range, so the shape never drifts out of its box under the pointer.
  */
 export function fitFraming(
   aspect: number,
   viewport: FramingViewport,
-  fov = CAMERA_FOV_DEGREES
+  positions: readonly [number, number, number][] = PRISM_POSITIONS,
+  fov = CAMERA_FOV_DEGREES,
+  orientation: CameraOrientation = PRISM_ORIENTATION
 ): { distance: number; framing: ProjectionFraming } {
   const boundsAt = (distance: number) => {
     const matrices: Float32Array[] = [];
     for (const orbitX of [-1, 0, 1]) {
       for (const orbitY of [-1, 0, 1]) {
-        matrices.push(cameraView(aspect, orbitX, orbitY, distance, fov).viewProjection);
+        matrices.push(
+          cameraView(aspect, orbitX, orbitY, distance, fov, orientation).viewProjection
+        );
       }
     }
-    return projectedBounds(matrices, MESH_POSITIONS);
+    return projectedBounds(matrices, positions);
   };
 
   let low = Math.max(1e-4, MIN_DISTANCE);

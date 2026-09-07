@@ -7,6 +7,12 @@ import {
 // The planar regions of the rounded mesh lie exactly on these four planes.
 // Beveled pixels begin slightly inside the same convex hull, so intersecting
 // the hull remains a stable approximation at corners without a depth march.
+//
+// They are the mesh's own coordinates. vgpu draws the solid at the origin, so
+// there they are world planes too; this page carries the same mesh into the
+// frame its lit wall lives in, so the trace runs in mesh space — `modelInverse`
+// takes the ray there and `model` brings the sample point back — and every
+// distance below stays in the units these planes are written in.
 const V0 = vec3f(0.0, 1.0, 0.0);
 const V1 = vec3f(0.94280904158, -0.33333333333, 0.0);
 const V2 = vec3f(-0.47140452079, -0.33333333333, 0.81649658093);
@@ -16,6 +22,7 @@ const TETRAHEDRON_PLANE = 0.33333333333;
 struct GlassParams {
   viewProjection: mat4x4f,
   model: mat4x4f,
+  modelInverse: mat4x4f,
   cameraPosition: vec3f,
   meshMin: vec3f,
   meshMax: vec3f,
@@ -128,9 +135,12 @@ fn sampleInterior(uv: vec2f, halfTexel: vec2f) -> vec3f {
   }
   let fresnel = dielectricFresnel(params.ior, facing);
   let refracted = normalize(refract(incident, normal, 1.0 / params.ior));
+  let localOrigin = (params.modelInverse * vec4f(in.worldPosition, 1.0)).xyz;
+  let localNormal = normalize((params.modelInverse * vec4f(normal, 0.0)).xyz);
+  let localRefracted = normalize((params.modelInverse * vec4f(refracted, 0.0)).xyz);
   let exitDistance = tetrahedronExitDistance(
-    in.worldPosition + refracted * 0.0002,
-    refracted,
+    localOrigin + localRefracted * 0.0002,
+    localRefracted,
   );
 
   let originalUv = in.position.xy / max(params.resolution, vec2f(1.0));
@@ -140,9 +150,10 @@ fn sampleInterior(uv: vec2f, halfTexel: vec2f) -> vec3f {
   // preserves the mesh silhouette while the IOR still bends its screen-space
   // lookup by the physical shell gap.
   let shellGap = (1.0 - params.fractalScale) * TETRAHEDRON_PLANE;
-  let insetDistance = shellGap / max(-dot(normal, refracted), 0.05);
+  let insetDistance = shellGap / max(-dot(localNormal, localRefracted), 0.05);
   let sampleDistance = min(exitDistance, insetDistance);
-  let samplePoint = in.worldPosition + refracted * select(0.0, sampleDistance, validExit);
+  let localSample = localOrigin + localRefracted * select(0.0, sampleDistance, validExit);
+  let samplePoint = (params.model * vec4f(localSample, 1.0)).xyz;
   let refractedUv = select(originalUv, projectToUv(samplePoint), validExit);
   let safeResolution = max(params.resolution, vec2f(1.0));
   let halfTexel = 0.5 / safeResolution;

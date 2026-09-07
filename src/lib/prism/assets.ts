@@ -25,11 +25,13 @@ import environmentBakeWgsl from "./environment-bake.wgsl";
 import environmentBlurWgsl from "./environment-blur.wgsl";
 import {
   CAUSTIC_PROFILE_SIZE,
+  PRISM_GROUNDING,
   ENVIRONMENT_MIP_LEVELS,
   ENVIRONMENT_SIZE,
   WALL_LIGHTING_SIZE,
   WALL_LIGHT_MASK_URL,
   WALL_MATERIAL_SIZE,
+  type PrismGrounding,
   type Vec2,
 } from "./constants";
 
@@ -153,7 +155,16 @@ async function bakeMipped(
   }
 }
 
-export async function createPrismAssets(gpu: Gpu, signal?: AbortSignal): Promise<PrismAssets> {
+/**
+ * `grounding` is the glass's wall-facing outline, baked into the lighting
+ * texture's GB channels. The prism's own is the default; the landing page's
+ * pyramid bakes its silhouette instead.
+ */
+export async function createPrismAssets(
+  gpu: Gpu,
+  signal?: AbortSignal,
+  grounding: PrismGrounding = PRISM_GROUNDING
+): Promise<PrismAssets> {
   const mask = await loadWallMask(gpu, signal);
   signal?.throwIfAborted();
 
@@ -191,7 +202,13 @@ export async function createPrismAssets(gpu: Gpu, signal?: AbortSignal): Promise
       "wall-lighting",
       bakeWallLightingWgsl,
       {
-        params: { useMask: mask ? 1 : 0 },
+        params: {
+          useMask: mask ? 1 : 0,
+          contactStrength: grounding.contactStrength,
+          apex: grounding.apex,
+          left: grounding.left,
+          right: grounding.right,
+        },
         wallMask: placeholder,
         wallMaskSampler: maskSampler,
       }

@@ -233,33 +233,69 @@ export function prismMeshPositions(): [number, number, number][] {
   return positions;
 }
 
-/**
- * The cast shadow, as an analytic core with a penumbra skirt.
- *
- * The hull of the cross-section and its copy projected along the key light is
- * the umbra; two offset rings around it carry the coverage ramp. `travel` is 0
- * on the vertices that came from the prism itself and 1 on the projected copy,
- * which is what lets the shader fade the shadow along its length.
- */
-export function prismShadowMeshData(
-  triangle: PrismTriangle = PRISM_TRIANGLE,
-  shadow = PRISM_SHADOW
-): { vertices: Float32Array; indices: Uint32Array } {
-  const seeds = [triangle.a, triangle.b, triangle.c].flatMap((corner) => [
-    { position: corner as Vec2, travel: 0 },
-    {
-      position: [
-        corner[0] + shadow.projection[0],
-        corner[1] + shadow.projection[1],
-      ] as Vec2,
-      travel: 1,
-    },
-  ]);
-  const hull = convexHull(seeds);
-  if (hull.length < 3) throw new Error("A cast-shadow hull needs three points.");
+/** A solid's outline on the wall, with how far each point travelled to get there. */
+export interface ShadowHull {
+  readonly outline: Vec2[];
+  readonly travel: number[];
+}
 
-  const outline = hull.map(({ position }) => position);
-  const travel = hull.map((point) => point.travel);
+/**
+ * Where a solid's corners land on the wall.
+ *
+ * Every corner slides along the key light in proportion to how far it stands
+ * off the plaster — `travel` 0 on the plane nearest the wall, 1 on the furthest
+ * — and the hull of those wall points is the umbra. For the extruded prism that
+ * is its cross-section and the copy of it the front face casts; for the pyramid
+ * it is four corners at four different depths.
+ */
+export function shadowHull(
+  corners: readonly (readonly [number, number, number])[],
+  backZ: number,
+  frontZ: number,
+  projection: Vec2
+): ShadowHull {
+  const depth = frontZ - backZ || 1;
+  const hull = convexHull(
+    corners.map((corner) => {
+      const travel = (corner[2] - backZ) / depth;
+      return {
+        position: [
+          corner[0] + projection[0] * travel,
+          corner[1] + projection[1] * travel,
+        ] as Vec2,
+        travel,
+      };
+    })
+  );
+  if (hull.length < 3) throw new Error("A cast-shadow hull needs three points.");
+  return {
+    outline: hull.map(({ position }) => position),
+    travel: hull.map((point) => point.travel),
+  };
+}
+
+/** The parts of a shadow's tuning the mesh itself is built from. */
+export interface ShadowProfile {
+  readonly projection: Vec2;
+  readonly nearPenumbra: number;
+  readonly farPenumbra: number;
+  readonly midRing: number;
+  readonly midCoverage: number;
+}
+
+/**
+ * The cast shadow, as an analytic core with a penumbra skirt: the umbra hull,
+ * with two offset rings around it carrying the coverage ramp. `travel` rides
+ * along on each vertex, which is what lets the shader fade the shadow down its
+ * length.
+ */
+export function shadowMeshDataFrom(
+  corners: readonly (readonly [number, number, number])[],
+  backZ: number,
+  frontZ: number,
+  shadow: ShadowProfile
+): { vertices: Float32Array; indices: Uint32Array } {
+  const { outline, travel } = shadowHull(corners, backZ, frontZ, shadow.projection);
   const penumbra = travel.map(
     (t) => shadow.nearPenumbra + (shadow.farPenumbra - shadow.nearPenumbra) * t
   );
@@ -292,8 +328,117 @@ export function prismShadowMeshData(
   return { vertices: new Float32Array(vertices), indices: new Uint32Array(indices) };
 }
 
+/** The prism's own shadow: its cross-section at each end of the extrusion. */
+export function prismShadowMeshData(
+  triangle: PrismTriangle = PRISM_TRIANGLE,
+  shadow = PRISM_SHADOW,
+  backZ: number = PRISM_BACK_Z,
+  frontZ: number = PRISM_FRONT_Z
+): { vertices: Float32Array; indices: Uint32Array } {
+  const corners = [triangle.a, triangle.b, triangle.c].flatMap(
+    (corner) =>
+      [
+        [corner[0], corner[1], backZ],
+        [corner[0], corner[1], frontZ],
+      ] as [number, number, number][]
+  );
+  return shadowMeshDataFrom(corners, backZ, frontZ, shadow);
+}
+
+/** How the light that passes through the glass pools inside its own shadow. */
+export interface CausticProfile {
+  /** How far the pool contracts toward the umbra's centre. */
+  readonly focus: number;
+  /** How far it then slides on along the key light, as a share of the umbra. */
+  readonly drift: number;
+  /** How far the glow spreads past its own outline, in world units. */
+  readonly spread: number;
+  /** Brightness on its own outline, where the centre of the pool is 1. */
+  readonly rim: number;
+  /** Brightness partway out through the falloff. */
+  readonly midGlow: number;
+  readonly midRing: number;
+}
+
+/**
+ * The caustic: a contracted, drifted copy of the umbra's own outline.
+ *
+ * A solid of clear glass does not stop the light behind it, it moves it — the
+ * beam that entered the shape leaves it turned, and lands inside the shadow the
+ * shape's silhouette casts as a smaller, brighter figure of itself. That is what
+ * this mesh is: the same hull, pulled toward its centre and pushed along the
+ * key light, brightest in the middle where the folded beam piles up, and fading
+ * out through a skirt so it settles into the shadow rather than cutting it.
+ */
+export function causticMeshDataFrom(
+  hull: ShadowHull,
+  projection: Vec2,
+  caustic: CausticProfile
+): { vertices: Float32Array; indices: Uint32Array } {
+  const centroid = polygonCentroid(hull.outline);
+  const outline = hull.outline.map(
+    (point): Vec2 => [
+      centroid[0] + (point[0] - centroid[0]) * caustic.focus + projection[0] * caustic.drift,
+      centroid[1] + (point[1] - centroid[1]) * caustic.focus + projection[1] * caustic.drift,
+    ]
+  );
+  const widths = outline.map(() => caustic.spread);
+  const midRing = offsetPolygon(outline, widths.map((width) => width * caustic.midRing));
+  const outerRing = offsetPolygon(outline, widths);
+  const centre = polygonCentroid(outline);
+
+  const vertices: number[] = [centre[0], centre[1], 1];
+  const appendRing = (ring: Vec2[], glow: number) => {
+    for (const point of ring) vertices.push(point[0], point[1], glow);
+  };
+  appendRing(outline, caustic.rim);
+  appendRing(midRing, caustic.midGlow);
+  appendRing(outerRing, 0);
+
+  const count = outline.length;
+  const midFirst = 1 + count;
+  const outerFirst = midFirst + count;
+  const indices: number[] = [];
+  for (let index = 0; index < count; index++) {
+    const next = (index + 1) % count;
+    indices.push(0, 1 + index, 1 + next);
+    indices.push(1 + index, midFirst + index, midFirst + next);
+    indices.push(1 + index, midFirst + next, 1 + next);
+    indices.push(midFirst + index, outerFirst + index, outerFirst + next);
+    indices.push(midFirst + index, outerFirst + next, midFirst + next);
+  }
+
+  return { vertices: new Float32Array(vertices), indices: new Uint32Array(indices) };
+}
+
+export function causticGeometryFrom(
+  gpu: Gpu,
+  { vertices, indices }: { vertices: Float32Array; indices: Uint32Array },
+  label: string
+): Geometry {
+  return geometry(gpu, {
+    label,
+    buffers: [
+      {
+        data: vertices,
+        stride: 12,
+        attributes: { position: "float32x2", glow: "float32" },
+      },
+    ],
+    indices,
+  });
+}
+
 export function prismShadowGeometry(gpu: Gpu, label: string): Geometry {
-  const { vertices, indices } = prismShadowMeshData();
+  return shadowGeometryFrom(gpu, prismShadowMeshData(), label);
+}
+
+/** Uploads a shadow mesh in the layout `shadow.wgsl` reads. */
+export function shadowGeometryFrom(
+  gpu: Gpu,
+  { vertices, indices }: { vertices: Float32Array; indices: Uint32Array },
+  label: string
+): Geometry {
   return geometry(gpu, {
     label,
     buffers: [

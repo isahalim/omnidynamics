@@ -55,13 +55,24 @@ fn triangleContains(point: vec2f, a: vec2f, b: vec2f, c: vec2f) -> bool {
     || (ab <= 0.0 && bc <= 0.0 && ca <= 0.0);
 }
 
-/** The prism's baked contact shadow (x) and edge occlusion (y), in local units. */
-export fn grounding(point: vec2f) -> vec2f {
-  let apex = vec2f(0.0, -0.5773502692);
-  let left = vec2f(-0.5, 0.2886751346);
-  let right = vec2f(0.5, 0.2886751346);
+/**
+ * The glass's baked contact shadow (x) and edge occlusion (y), in local units.
+ *
+ * The outline is passed in rather than fixed: it is the prism's cross-section
+ * on the coming-soon pages and the pyramid's wall-facing silhouette on the
+ * landing page. `contactStrength` scales the term that darkens the plaster
+ * where the solid meets it — a whole face for the prism, two corners for the
+ * pyramid.
+ */
+export fn grounding(
+  point: vec2f,
+  apex: vec2f,
+  left: vec2f,
+  right: vec2f,
+  contactStrength: f32,
+) -> vec2f {
   let base = segmentDistance(point, left, right);
-  let baseContact = exp(-(base * base) / 0.00135);
+  let baseContact = exp(-(base * base) / 0.00135) * contactStrength;
   let edge = min(
     segmentDistance(point, apex, left),
     min(segmentDistance(point, left, right), segmentDistance(point, right, apex)),

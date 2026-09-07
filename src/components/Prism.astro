@@ -1,36 +1,5 @@
 ---
-import { PRISM_STATES, type PrismState } from "../lib/glass/models";
-
-interface Props {
-  /** Shape shown on load. */
-  initial?: PrismState;
-  /** The landing page picks a platform; the coming-soon pages are fixed. */
-  picker?: boolean;
-  /**
-   * Pans the camera sideways in world units, sliding the prism the other way
-   * across the viewport. The coming-soon pages use it to clear their copy.
-   */
-  focus?: number;
-  /**
-   * Dollies the camera back. The canvas is the whole viewport and the FOV is
-   * vertical, so this is how a page sets the prism's share of the wall.
-   */
-  distance?: number;
-  /**
-   * Draws the spectral beam through the prism and leaves the glass empty —
-   * vgpu's own light hero. The landing page holds a platform in the glass
-   * instead, so it takes every other effect but this one.
-   */
-  beam?: boolean;
-}
-
-const {
-  initial = "orb",
-  picker = true,
-  focus = 0,
-  distance = 1.45,
-  beam = false,
-} = Astro.props;
+import { PRISM_STATES } from "../lib/glass/models";
 ---
 
 {/*
@@ -41,38 +10,32 @@ const {
 */}
 <canvas id="prism" class="wall" aria-hidden="true"></canvas>
 
-<section
-  class="stage"
-  data-initial={initial}
-  data-focus={focus}
-  data-distance={distance}
-  data-beam={beam ? "" : null}
->
-  {/* Click surface: the shape fills the middle of the viewport. */}
-  {picker && (
-    <button id="prism-hit" type="button" class="hit">
-      <span class="sr-only">Open the selected platform</span>
-    </button>
-  )}
+<section class="stage">
+  {/*
+    Click surface, and the box the glass is fitted into: the renderer measures
+    it and dollies the camera until the pyramid fills it, so the shape and the
+    thing you click on are the same rectangle.
+  */}
+  <button id="prism-hit" type="button" class="hit">
+    <span class="sr-only">Open the selected platform</span>
+  </button>
 
   <p id="prism-status" class="status" role="status" aria-live="polite"></p>
 
-  {picker && (
-    <div class="picker" role="group" aria-label="Platform">
-      {PRISM_STATES.map((state) => (
-        <button
-          type="button"
-          class="chip clicky"
-          data-state={state.id}
-          aria-pressed={state.id === initial ? "true" : "false"}
-        >
-          {state.label}
-        </button>
-      ))}
-    </div>
-  )}
+  <div class="picker" role="group" aria-label="Platform">
+    {PRISM_STATES.map((state) => (
+      <button
+        type="button"
+        class="chip clicky"
+        data-state={state.id}
+        aria-pressed={state.id === "orb" ? "true" : "false"}
+      >
+        {state.label}
+      </button>
+    ))}
+  </div>
 
-  {picker && <div id="warp" class="warp" hidden></div>}
+  <div id="warp" class="warp" hidden></div>
 </section>
 
 <style>
@@ -205,21 +168,25 @@ const {
 </style>
 
 <script>
-  import { createRenderer } from "../lib/glass/renderer";
-  import { PRISM_STATES, prefetchInteriors, type PrismState } from "../lib/glass/models";
+  import { createHeroRenderer } from "../lib/prism/hero-renderer";
+  import type { PrismInteriorId } from "../lib/prism/interior";
+  import {
+    PRISM_STATES,
+    interiorFor,
+    prefetchInteriors,
+    type PrismState,
+  } from "../lib/glass/models";
 
-  const stage = document.querySelector<HTMLElement>(".stage");
   const canvas = document.getElementById("prism") as HTMLCanvasElement | null;
   const status = document.getElementById("prism-status");
-  if (!stage || !canvas || !status) throw new Error("prism markup missing");
-
-  // Only the landing page offers a click-through; the coming-soon pages are
-  // already the destination.
   const hit = document.getElementById("prism-hit") as HTMLButtonElement | null;
   const warp = document.getElementById("warp");
-
   const picker = document.querySelector<HTMLElement>(".picker");
-  const chips = picker ? [...picker.querySelectorAll<HTMLButtonElement>(".chip")] : [];
+  if (!canvas || !status || !hit || !warp || !picker) {
+    throw new Error("prism markup missing");
+  }
+
+  const chips = [...picker.querySelectorAll<HTMLButtonElement>(".chip")];
   const hrefFor = new Map(PRISM_STATES.map((s) => [s.id, s.href] as const));
 
   const say = (message: string) => {
@@ -229,24 +196,9 @@ const {
 
   if (!("gpu" in navigator)) say("This page needs WebGPU");
 
-  const initial = (stage.dataset.initial ?? "orb") as PrismState;
-  const distanceScale = Number(stage.dataset.distance ?? 1) || 1;
-  // The pan only makes sense while the copy sits beside the prism. Once the
-  // layout stacks, the same offset would push the prism off the screen edge,
-  // so it recentres with the breakpoint.
-  const focus = Number(stage.dataset.focus ?? 0) || 0;
-  const wide = window.matchMedia("(min-width: 56rem)");
-  const focusFor = () => (wide.matches ? focus : 0);
-  const beam = stage.dataset.beam !== undefined;
-  const renderer = createRenderer({
-    canvas,
-    framing: { focus: focusFor(), distanceScale },
-    caustics: beam,
-    interior: !beam,
-  });
-  if (focus !== 0) {
-    wide.addEventListener("change", () => renderer.setFocus(focusFor()));
-  }
+  // The coming-soon pages' wall, with vgpu's glass-fractal tetrahedron standing
+  // on it and a platform held inside the glass.
+  const renderer = createHeroRenderer({ canvas, frame: hit });
   let current: PrismState = "orb";
 
   // Nothing can be selected until there is a scene to morph: a click landing
@@ -255,13 +207,9 @@ const {
   for (const chip of chips) chip.disabled = true;
 
   renderer.ready.then(
-    async () => {
+    () => {
       canvas.classList.add("ready");
       for (const chip of chips) chip.disabled = false;
-      if (initial !== "orb") {
-        await renderer.setState(initial);
-        current = initial;
-      }
       if (typeof window.requestIdleCallback === "function") {
         window.requestIdleCallback(prefetchInteriors);
       } else {
@@ -283,7 +231,7 @@ const {
     const slow = window.setTimeout(() => say("Loading"), 260);
     for (const c of chips) c.disabled = true;
     try {
-      await renderer.setState(next);
+      await renderer.setState(interiorFor(next) as PrismInteriorId);
     } catch (error) {
       console.error("prism state failed", error);
       say("That platform could not load");
@@ -302,14 +250,13 @@ const {
   }
 
   /** The orb zooms through to the product; every other shape opens its page. */
-  hit?.addEventListener("click", (event) => {
+  hit.addEventListener("click", (event) => {
     event.preventDefault();
     const href = hrefFor.get(current) ?? `/soon/${current}/`;
     if (current !== "orb") {
       window.location.href = href;
       return;
     }
-    if (!warp) { window.location.href = href; return; }
     const box = hit.getBoundingClientRect();
     warp.style.setProperty("--x", `${((box.left + box.width / 2) / window.innerWidth) * 100}%`);
     warp.style.setProperty("--y", `${((box.top + box.height / 2) / window.innerHeight) * 100}%`);

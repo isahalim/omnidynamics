@@ -1,101 +1,45 @@
 ---
+/**
+ * The monogram, traced from the drawn mark: a ring with a straight stem set a
+ * third of the way across it, meeting the ring top and bottom. The ring's own
+ * right side is the D's bowl — there is no second arc — which is what keeps it
+ * to two strokes and lets it hold at favicon size.
+ *
+ * It takes `currentColor`, so it is the same ink as the wordmark beside it on
+ * whichever wall it sits.
+ */
 interface Props {
   size?: number;
 }
 const { size = 42 } = Astro.props;
 
-// The monogram: an outer ring with a D nested inside it, drawn as thick round
-// tubing. The same geometry drives the refraction mask and the visible glass,
-// so it is defined once here and URL-encoded for the CSS mask.
-const STROKE = 9;
-const GEOMETRY = `<circle cx="50" cy="50" r="42"/><path d="M32 22.5 A35.5 35.5 0 1 1 32 77.5 Z"/>`;
-const maskSvg =
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">` +
-  `<g fill="none" stroke="#fff" stroke-width="${STROKE}" ` +
-  `stroke-linecap="round" stroke-linejoin="round">${GEOMETRY}</g></svg>`;
-const mask = `url("data:image/svg+xml,${encodeURIComponent(maskSvg)}")`;
+/** Radius of the ring's centreline, and the stem's offset from centre. */
+const RADIUS = 45;
+const STEM_X = 28.4;
+/** Where the stem meets the ring, so the two strokes join rather than cross. */
+const STEM_Y = Math.sqrt(RADIUS ** 2 - (50 - STEM_X) ** 2);
 ---
 
-<span class="mark" style={`--size:${size}px; --mask:${mask}`} aria-hidden="true">
-  <!-- Refracts whatever the tubing sits over. -->
-  <span class="refract"></span>
-
-  <svg viewBox="0 0 100 100" role="presentation">
-    <defs>
-      <linearGradient id="glass-body" x1="0" y1="0" x2="0.35" y2="1">
-        <stop offset="0%" stop-color="#ffffff" stop-opacity="0.95" />
-        <stop offset="38%" stop-color="#ffffff" stop-opacity="0.28" />
-        <stop offset="62%" stop-color="#5d5446" stop-opacity="0.22" />
-        <stop offset="100%" stop-color="#ffffff" stop-opacity="0.75" />
-      </linearGradient>
-      <!-- A hint of dispersion where the tube turns away from the light. -->
-      <linearGradient id="glass-edge" x1="0.1" y1="0" x2="0.9" y2="1">
-        <stop offset="0%" stop-color="#8fd8ff" stop-opacity="0.55" />
-        <stop offset="45%" stop-color="#ffffff" stop-opacity="0" />
-        <stop offset="100%" stop-color="#ffc9a8" stop-opacity="0.5" />
-      </linearGradient>
-    </defs>
-
-    <g fill="none" stroke-linecap="round" stroke-linejoin="round">
-      <!-- Contact shadow under the tubing. -->
-      <g class="cast" stroke="#4a4032" stroke-width={STROKE} opacity="0.22"
-         transform="translate(0.9 1.4)" set:html={GEOMETRY} />
-      <!-- Glass body. -->
-      <g stroke="url(#glass-body)" stroke-width={STROKE} set:html={GEOMETRY} />
-      <!-- Chromatic edge. -->
-      <g stroke="url(#glass-edge)" stroke-width={STROKE} set:html={GEOMETRY} />
-      <!-- Specular run along the top of each tube. -->
-      <g class="spec" stroke="#ffffff" stroke-width={STROKE * 0.3}
-         opacity="0.92" transform="translate(-0.5 -1.5)" set:html={GEOMETRY} />
-    </g>
-  </svg>
-</span>
+<svg
+  class="mark"
+  style={`--size:${size}px`}
+  viewBox="0 0 100 100"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="9.5"
+  stroke-linecap="round"
+  role="img"
+  aria-label="OmniDynamics"
+>
+  <circle cx="50" cy="50" r={RADIUS} />
+  <line x1={STEM_X} y1={50 - STEM_Y} x2={STEM_X} y2={50 + STEM_Y} />
+</svg>
 
 <style>
   .mark {
-    position: relative;
     display: block;
     inline-size: var(--size);
     block-size: var(--size);
-    isolation: isolate;
-  }
-
-  /* Blur + magnify behind the tubing reads as refraction through solid glass. */
-  .refract {
-    position: absolute;
-    inset: 0;
-    backdrop-filter: blur(5px) saturate(190%) brightness(1.07);
-    -webkit-backdrop-filter: blur(5px) saturate(190%) brightness(1.07);
-    mask-image: var(--mask);
-    -webkit-mask-image: var(--mask);
-    mask-size: 100% 100%;
-    -webkit-mask-size: 100% 100%;
-    mask-repeat: no-repeat;
-    -webkit-mask-repeat: no-repeat;
-  }
-
-  .mark svg {
-    position: relative;
-    inline-size: 100%;
-    block-size: 100%;
     overflow: visible;
-  }
-
-  .spec {
-    /* Clipped to the upper half so the highlight reads as a lit tube crown. */
-    mask-image: linear-gradient(#000 0 42%, transparent 62%);
-    -webkit-mask-image: linear-gradient(#000 0 42%, transparent 62%);
-  }
-
-  :global(.brand:hover) .spec {
-    opacity: 1;
-    transform: translate(-1px, -2.2px);
-  }
-  .spec {
-    transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.4s ease;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .spec { transition: none; }
   }
 </style>

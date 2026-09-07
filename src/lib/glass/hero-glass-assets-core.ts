@@ -129,6 +129,45 @@ export function createHeroGlassAssets(
 }
 
 /**
+ * The prefiltered studio, as a cubemap with its mip chain.
+ *
+ * The atlas packs six faces per level across three columns, each level laid out
+ * to the right of the last. This is the environment vgpu's glass-fractal
+ * material reflects and its interior is lit by, so both pages that show that
+ * material read the same texture.
+ */
+export function createStudioCubemap(gpu: Gpu, atlas: RgbaAtlas) {
+  const faceSize = atlas.height / CUBEMAP_ROWS;
+  const mipLevelCount = Math.floor(Math.log2(faceSize)) + 1;
+  let expectedWidth = 0;
+  for (let level = 0; level < mipLevelCount; level++)
+    expectedWidth += CUBEMAP_COLUMNS * Math.max(1, faceSize >> level);
+  if (
+    !Number.isInteger(faceSize) ||
+    2 ** (mipLevelCount - 1) !== faceSize ||
+    atlas.width !== expectedWidth ||
+    atlas.data.byteLength !== atlas.width * atlas.height * 4
+  ) {
+    throw new Error("Hero cubemap atlas must contain a packed spherical mip chain.");
+  }
+  const texture = gpu.device.createTexture({
+    size: [faceSize, faceSize, 6],
+    format: "rgba8unorm-srgb",
+    usage: ["texture_binding", "copy_dst"],
+    mipLevelCount,
+    label: "homepage-light-glass-studio-cubemap",
+  });
+  uploadPackedCubemapMipAtlas(gpu, texture, atlas, faceSize, mipLevelCount);
+  return {
+    texture,
+    view: cubeView(texture, {
+      compat: true,
+      label: "homepage-light-glass-studio-cubemap-array-view",
+    }),
+  };
+}
+
+/**
  * Uploads the baked plaster material with a box-filtered mip chain. Without
  * mips the normal field aliases badly where the floor recedes.
  */
