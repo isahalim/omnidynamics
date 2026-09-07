@@ -1,0 +1,17 @@
+{
+  "name": "omnidynamics",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "wrangler dev",
+    "check": "astro check",
+    "deploy": "astro build && wrangler deploy"
+  },
+  "devDependencies": {
+    "astro": "^7.3.1",
+    "wrangler": "^4.129.0"
+  }
+}

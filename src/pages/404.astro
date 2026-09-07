@@ -1,0 +1,33 @@
+---
+import Base from '../layouts/Base.astro';
+---
+
+<Base title="Not found — Omnidynamics" description="Page not found.">
+  <main>
+    <h1>404</h1>
+    <p><a href="/">Back to omnidynamics.dev</a></p>
+  </main>
+
+  <style>
+    main {
+      min-height: 100dvh;
+      display: grid;
+      align-content: center;
+      gap: 0.5rem;
+      max-width: 40rem;
+      margin-inline: auto;
+      padding: 2rem 1.5rem;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 3rem;
+      letter-spacing: -0.03em;
+      font-weight: 600;
+    }
+
+    a {
+      color: inherit;
+    }
+  </style>
+</Base>
