@@ -232,6 +232,8 @@ export function setHeroFractalSceneSettings(
   const time = settings.time ?? 0;
 
   scene.background.set({
+    wallMaterial: assets.wallMaterial,
+    wallSampler: assets.wallSampler,
     params: {
       resolution,
       cameraPosition: position,

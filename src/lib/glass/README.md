@@ -16,7 +16,23 @@ Vendored from vgpu's `glass-fractal` example (vercel-labs/vgpu, MIT — see
 - **`hero-glass-assets-core.ts`** — `decodeMesh` is exported so `models.ts` can
   decode the generated model meshes.
 
+- **`hero-wall.wgsl`** (ours) — plaster shading ported from vgpu's
+  `prism-background` wall pass, using its measured values: normal strength
+  0.22, micro frequency 7, micro strength 1.05, ambient 0.5, light direction
+  [-0.48, 0.56, 0.68]. The backdrop samples it in screen space (it reads as a
+  head-on wall); the floor samples it in world space so perspective is right.
+
 `models.ts` is ours: the state list, lazy mesh loading and prefetch.
+
+## Regenerating the wall
+
+`scripts/build-wall.mjs` bakes `public/glass/wall-material.png`
+(r = albedo, gb = normal XY, a = roughness). The height field is vgpu's
+two-octave plaster fbm made tileable — the lattice wraps and octaves double
+exactly, rather than vgpu's 2.07 — plus a layer of tapered directional
+scratches that cross the tile seam.
+
+    node scripts/build-wall.mjs
 
 ## Regenerating the model meshes
 

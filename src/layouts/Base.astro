@@ -40,6 +40,9 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
 
   *, *::before, *::after { box-sizing: border-box; }
 
+  /* Components set display on these; without this the attribute is ignored. */
+  [hidden] { display: none !important; }
+
   html { -webkit-text-size-adjust: 100%; }
 
   body {

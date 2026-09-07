@@ -18,6 +18,8 @@ export interface HeroGlassAssets {
   readonly fractalMeshMax: readonly [number, number, number];
   readonly environment: Texture;
   readonly environmentView: GPUTextureView;
+  readonly wallMaterial: Texture;
+  readonly wallSampler: GPUSampler;
   dispose(): void;
 }
 
@@ -32,7 +34,8 @@ export function createHeroGlassAssets(
   gpu: Gpu,
   glassMeshBuffer: ArrayBuffer,
   fractalMeshBuffer: ArrayBuffer,
-  atlas: RgbaAtlas
+  atlas: RgbaAtlas,
+  wallAtlas: RgbaAtlas
 ): HeroGlassAssets {
   const glassMesh = decodeMesh(gpu, glassMeshBuffer, "glass-pyramid");
   let fractalMesh: ReturnType<typeof decodeMesh> | undefined;
@@ -74,9 +77,12 @@ export function createHeroGlassAssets(
       compat: true,
       label: "homepage-light-glass-studio-cubemap-array-view",
     });
+    const wall = createWallMaterial(gpu, wallAtlas);
     let disposed = false;
     return {
       ...glassMesh,
+      wallMaterial: wall.texture,
+      wallSampler: wall.sampler,
       fractalGeometry: loadedFractal.geometry,
       fractalWireframeGeometry: loadedFractal.wireframeGeometry,
       fractalMeshMin: loadedFractal.meshMin,
@@ -92,6 +98,7 @@ export function createHeroGlassAssets(
           loadedFractal.geometry,
           loadedFractal.wireframeGeometry,
           loadedEnvironment,
+          wall.texture,
         ]);
       },
     };
@@ -109,6 +116,68 @@ export function createHeroGlassAssets(
     }
     throw error;
   }
+}
+
+/**
+ * Uploads the baked plaster material with a box-filtered mip chain. Without
+ * mips the normal field aliases badly where the floor recedes.
+ */
+function createWallMaterial(gpu: Gpu, atlas: RgbaAtlas) {
+  const size = atlas.width;
+  if (atlas.height !== size || (size & (size - 1)) !== 0)
+    throw new Error("Wall material must be a square power-of-two texture.");
+  const mipLevelCount = Math.log2(size) + 1;
+  const texture = gpu.device.createTexture({
+    size: [size, size, 1],
+    format: "rgba8unorm",
+    usage: ["texture_binding", "copy_dst"],
+    mipLevelCount,
+    label: "wall-plaster-material",
+  });
+
+  let level = new Uint8Array(atlas.data);
+  let levelSize = size;
+  for (let mipLevel = 0; mipLevel < mipLevelCount; mipLevel++) {
+    const bytesPerRow = Math.ceil(levelSize * 4 / 256) * 256;
+    const upload = new Uint8Array(bytesPerRow * levelSize);
+    for (let row = 0; row < levelSize; row++)
+      upload.set(level.subarray(row * levelSize * 4, (row + 1) * levelSize * 4), row * bytesPerRow);
+    gpu.gpu.queue.writeTexture(
+      { texture: texture.gpu, mipLevel },
+      upload,
+      { bytesPerRow, rowsPerImage: levelSize },
+      [levelSize, levelSize, 1]
+    );
+    if (mipLevel + 1 >= mipLevelCount) break;
+    level = downsample(level, levelSize);
+    levelSize >>= 1;
+  }
+
+  const sampler = gpu.device.createSampler({
+    minFilter: "linear",
+    magFilter: "linear",
+    mipmapFilter: "linear",
+    addressModeU: "repeat",
+    addressModeV: "repeat",
+    maxAnisotropy: 8,
+    label: "wall-plaster-sampler",
+  });
+  return { texture, sampler };
+}
+
+function downsample(source: Uint8Array, size: number): Uint8Array {
+  const half = size >> 1;
+  const out = new Uint8Array(half * half * 4);
+  for (let y = 0; y < half; y++)
+    for (let x = 0; x < half; x++)
+      for (let c = 0; c < 4; c++) {
+        const a = source[((y * 2) * size + x * 2) * 4 + c]!;
+        const b = source[((y * 2) * size + x * 2 + 1) * 4 + c]!;
+        const d = source[((y * 2 + 1) * size + x * 2) * 4 + c]!;
+        const e = source[((y * 2 + 1) * size + x * 2 + 1) * 4 + c]!;
+        out[(y * half + x) * 4 + c] = (a + b + d + e + 2) >> 2;
+      }
+  return out;
 }
 
 function uploadPackedCubemapMipAtlas(

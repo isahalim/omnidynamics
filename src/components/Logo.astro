@@ -2,75 +2,100 @@
 interface Props {
   size?: number;
 }
-const { size = 38 } = Astro.props;
+const { size = 42 } = Astro.props;
+
+// The monogram: an outer ring with a D nested inside it, drawn as thick round
+// tubing. The same geometry drives the refraction mask and the visible glass,
+// so it is defined once here and URL-encoded for the CSS mask.
+const STROKE = 9;
+const GEOMETRY = `<circle cx="50" cy="50" r="42"/><path d="M32 22.5 A35.5 35.5 0 1 1 32 77.5 Z"/>`;
+const maskSvg =
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">` +
+  `<g fill="none" stroke="#fff" stroke-width="${STROKE}" ` +
+  `stroke-linecap="round" stroke-linejoin="round">${GEOMETRY}</g></svg>`;
+const mask = `url("data:image/svg+xml,${encodeURIComponent(maskSvg)}")`;
 ---
 
-<span class="mark" style={`--size:${size}px`} aria-hidden="true">
+<span class="mark" style={`--size:${size}px; --mask:${mask}`} aria-hidden="true">
+  <!-- Refracts whatever the tubing sits over. -->
+  <span class="refract"></span>
+
   <svg viewBox="0 0 100 100" role="presentation">
-    <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" stroke-width="6" />
-    <path
-      d="M30 20.5 A38 38 0 1 1 30 79.5 Z"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="6"
-      stroke-linejoin="round"
-    />
+    <defs>
+      <linearGradient id="glass-body" x1="0" y1="0" x2="0.35" y2="1">
+        <stop offset="0%" stop-color="#ffffff" stop-opacity="0.95" />
+        <stop offset="38%" stop-color="#ffffff" stop-opacity="0.28" />
+        <stop offset="62%" stop-color="#5d5446" stop-opacity="0.22" />
+        <stop offset="100%" stop-color="#ffffff" stop-opacity="0.75" />
+      </linearGradient>
+      <!-- A hint of dispersion where the tube turns away from the light. -->
+      <linearGradient id="glass-edge" x1="0.1" y1="0" x2="0.9" y2="1">
+        <stop offset="0%" stop-color="#8fd8ff" stop-opacity="0.55" />
+        <stop offset="45%" stop-color="#ffffff" stop-opacity="0" />
+        <stop offset="100%" stop-color="#ffc9a8" stop-opacity="0.5" />
+      </linearGradient>
+    </defs>
+
+    <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <!-- Contact shadow under the tubing. -->
+      <g class="cast" stroke="#4a4032" stroke-width={STROKE} opacity="0.22"
+         transform="translate(0.9 1.4)" set:html={GEOMETRY} />
+      <!-- Glass body. -->
+      <g stroke="url(#glass-body)" stroke-width={STROKE} set:html={GEOMETRY} />
+      <!-- Chromatic edge. -->
+      <g stroke="url(#glass-edge)" stroke-width={STROKE} set:html={GEOMETRY} />
+      <!-- Specular run along the top of each tube. -->
+      <g class="spec" stroke="#ffffff" stroke-width={STROKE * 0.3}
+         opacity="0.92" transform="translate(-0.5 -1.5)" set:html={GEOMETRY} />
+    </g>
   </svg>
-  <span class="sheen"></span>
 </span>
 
 <style>
-  /* A liquid-glass chip: refracting body, specular sheen, contact shadow. */
   .mark {
     position: relative;
-    display: grid;
-    place-items: center;
+    display: block;
     inline-size: var(--size);
     block-size: var(--size);
-    border-radius: 50%;
-    color: var(--accent);
-    background:
-      linear-gradient(150deg, rgb(255 255 255 / 0.75), rgb(255 255 255 / 0.15) 42%, rgb(255 255 255 / 0.5)),
-      rgb(255 255 255 / 0.22);
-    backdrop-filter: blur(7px) saturate(180%);
-    -webkit-backdrop-filter: blur(7px) saturate(180%);
-    box-shadow:
-      inset 0 1px 1px rgb(255 255 255 / 0.95),
-      inset 0 -1px 2px rgb(120 100 80 / 0.28),
-      inset 2px 0 3px -2px rgb(255 255 255 / 0.8),
-      0 1px 2px rgb(60 48 34 / 0.14),
-      0 6px 16px -6px rgb(60 48 34 / 0.3);
+    isolation: isolate;
+  }
+
+  /* Blur + magnify behind the tubing reads as refraction through solid glass. */
+  .refract {
+    position: absolute;
+    inset: 0;
+    backdrop-filter: blur(5px) saturate(190%) brightness(1.07);
+    -webkit-backdrop-filter: blur(5px) saturate(190%) brightness(1.07);
+    mask-image: var(--mask);
+    -webkit-mask-image: var(--mask);
+    mask-size: 100% 100%;
+    -webkit-mask-size: 100% 100%;
+    mask-repeat: no-repeat;
+    -webkit-mask-repeat: no-repeat;
   }
 
   .mark svg {
-    inline-size: 62%;
-    block-size: 62%;
+    position: relative;
+    inline-size: 100%;
+    block-size: 100%;
     overflow: visible;
-    filter: drop-shadow(0 1px 0 rgb(255 255 255 / 0.7));
   }
 
-  /* Moving highlight that sells the wet-glass surface. */
-  .sheen {
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    pointer-events: none;
-    background: linear-gradient(
-      115deg,
-      transparent 30%,
-      rgb(255 255 255 / 0.65) 46%,
-      transparent 60%
-    );
-    opacity: 0.75;
-    transform: translateX(-14%);
-    transition: transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+  .spec {
+    /* Clipped to the upper half so the highlight reads as a lit tube crown. */
+    mask-image: linear-gradient(#000 0 42%, transparent 62%);
+    -webkit-mask-image: linear-gradient(#000 0 42%, transparent 62%);
   }
 
-  :global(.brand:hover) .sheen {
-    transform: translateX(14%);
+  :global(.brand:hover) .spec {
+    opacity: 1;
+    transform: translate(-1px, -2.2px);
+  }
+  .spec {
+    transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.4s ease;
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .sheen { transition: none; }
+    .spec { transition: none; }
   }
 </style>

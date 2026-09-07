@@ -3,6 +3,12 @@ import {
   heroFloorAo,
 } from "./hero-fractal-floor-ao.wgsl";
 import { presentCeramic } from "./hero-fractal-presentation.wgsl";
+import { shadeWall } from "./hero-wall.wgsl";
+
+// World units per material tile: vgpu uses prismSide * 2.4.
+const WALL_WORLD_SCALE = 3.4;
+// Tile density for the backdrop, which is read as a head-on wall.
+const WALL_SCREEN_SCALE = 2.6;
 
 const HERO_FLOOR_Y = -0.33333333333;
 
@@ -27,6 +33,8 @@ struct Params {
   orbAoOpacity: f32,
 }
 @group(0) @binding(0) var<uniform> params: Params;
+@group(0) @binding(1) var wallMaterial: texture_2d<f32>;
+@group(0) @binding(2) var wallSampler: sampler;
 
 struct VertexOut {
   @builtin(position) position: vec4f,
@@ -81,7 +89,13 @@ fn gridLine(coordinate: vec2f, spacing: f32, pixelFootprint: f32) -> f32 {
   let topRightShade = 1.0 - smoothstep(0.08, 1.0, cornerDistance);
   // Warm the neutral studio backdrop toward the page's beige wall so the canvas
   // and the surrounding page read as one surface.
-  let backdrop = vec3f(2.93, 2.871, 2.757) * mix(1.0, 0.46, topRightShade);
+  let wallTint = vec3f(2.93, 2.871, 2.757) * mix(1.0, 0.46, topRightShade);
+  // Aspect-corrected so the plaster never stretches with the viewport.
+  let wallUv = vec2f(
+    uv.x * params.resolution.x / max(params.resolution.y, 1.0),
+    uv.y,
+  ) * WALL_SCREEN_SCALE;
+  let backdrop = shadeWall(wallUv, wallTint, wallMaterial, wallSampler).color;
   if (rd.y < -0.0001) {
     let floorT = (HERO_FLOOR_Y - ro.y) / rd.y;
     if (floorT > 0.0) {
@@ -104,7 +118,14 @@ fn gridLine(coordinate: vec2f, spacing: f32, pixelFootprint: f32) -> f32 {
         params.sphereMix,
         floorAoSettings,
       );
-      var floorColor = backdrop;
+      // The floor is the same plaster seen in perspective, so it takes world
+      // coordinates rather than the backdrop's screen-space projection.
+      var floorColor = shadeWall(
+        floorPoint.xz / WALL_WORLD_SCALE,
+        wallTint,
+        wallMaterial,
+        wallSampler,
+      ).color;
       if (params.floorGrid > 0.5) {
         let pixelFootprint = max(
           floorT * params.tanHalfFov * 3.2 / max(params.resolution.y, 1.0),
