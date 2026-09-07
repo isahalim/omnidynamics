@@ -1,50 +1,81 @@
 ---
-import Base from '../layouts/Base.astro';
+import Base from "../layouts/Base.astro";
+import Logo from "../components/Logo.astro";
+import Prism from "../components/Prism.astro";
 ---
 
-<Base title="Omnidynamics" description="Omnidynamics — coming soon.">
-  <main>
-    <p class="eyebrow">Omnidynamics</p>
-    <h1>Placeholder</h1>
-    <p class="lede">
-      The pipeline is live. This page exists so the deploy has something to
-      serve — the real hero lands next.
-    </p>
-  </main>
+<Base
+  title="OmniDynamics"
+  description="OmniDynamics builds embodied intelligence — drones, quadrupeds, manipulators and humanoids."
+>
+  <div class="page">
+    <!-- Not a bar: the header sits directly on the wall with the prism. -->
+    <header class="top">
+      <a class="brand clicky" href="/">
+        <Logo />
+        <span class="wordmark">OmniDynamics</span>
+      </a>
 
-  <style>
-    main {
-      min-height: 100dvh;
-      display: grid;
-      align-content: center;
-      gap: 0.75rem;
-      max-width: 40rem;
-      margin-inline: auto;
-      padding: 2rem 1.5rem;
-    }
+      <a class="contact clicky" href="mailto:hello@omnidynamics.dev">Contact</a>
+    </header>
 
-    .eyebrow {
-      margin: 0;
-      font-size: 0.8125rem;
-      font-weight: 500;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: var(--muted);
-    }
-
-    h1 {
-      margin: 0;
-      font-size: clamp(2.5rem, 8vw, 4rem);
-      line-height: 1.05;
-      letter-spacing: -0.03em;
-      font-weight: 600;
-    }
-
-    .lede {
-      margin: 0;
-      max-width: 32rem;
-      font-size: 1.0625rem;
-      color: var(--muted);
-    }
-  </style>
+    <main>
+      <Prism />
+    </main>
+  </div>
 </Base>
+
+<style>
+  .page {
+    position: relative;
+    z-index: 2;
+    max-inline-size: 88rem;
+    margin-inline: auto;
+    padding: clamp(1rem, 2.5vw, 1.75rem) clamp(1rem, 4vw, 3rem) 0;
+  }
+
+  .top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-block-end: clamp(0.75rem, 2vh, 1.5rem);
+  }
+
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.7rem;
+    text-decoration: none;
+    color: inherit;
+    border-radius: 999px;
+  }
+
+  .wordmark {
+    font-size: clamp(1rem, 1.35vw, 1.15rem);
+    font-weight: 600;
+    letter-spacing: -0.015em;
+  }
+
+  .contact {
+    padding: 0.55rem 1.15rem;
+    border-radius: 999px;
+    font-size: 0.9rem;
+    text-decoration: none;
+    color: var(--ink);
+    background: rgb(255 255 255 / 0.5);
+    backdrop-filter: blur(12px) saturate(170%);
+    -webkit-backdrop-filter: blur(12px) saturate(170%);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.9),
+      0 1px 2px rgb(60 48 34 / 0.12),
+      0 8px 20px -12px rgb(60 48 34 / 0.45);
+  }
+  .contact:hover {
+    background: rgb(255 255 255 / 0.72);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.95),
+      0 2px 4px rgb(60 48 34 / 0.14),
+      0 14px 30px -14px rgb(60 48 34 / 0.5);
+  }
+</style>

@@ -4,11 +4,7 @@ interface Props {
   description?: string;
 }
 
-const {
-  title,
-  description = 'Omnidynamics',
-} = Astro.props;
-
+const { title, description = "OmniDynamics" } = Astro.props;
 const canonical = new URL(Astro.url.pathname, Astro.site);
 ---
 
@@ -24,6 +20,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     <meta property="og:description" content={description} />
     <meta property="og:type" content="website" />
     <meta property="og:url" content={canonical} />
+    <meta name="theme-color" content="#efeae1" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   </head>
   <body>
@@ -33,46 +30,58 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
 
 <style is:global>
   :root {
-    color-scheme: light dark;
-    --bg: #ffffff;
-    --fg: #0d0d0f;
-    --muted: #6b6b76;
-    --line: #e6e6ea;
+    --wall: #efeae1;
+    --wall-deep: #e4dccf;
+    --ink: #16130f;
+    --muted: #6d6459;
+    --accent: #c0281d;
+    --line: rgb(60 48 34 / 0.12);
   }
 
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #0d0d0f;
-      --fg: #f4f4f6;
-      --muted: #9a9aa5;
-      --line: #26262c;
-    }
-  }
+  *, *::before, *::after { box-sizing: border-box; }
 
-  *,
-  *::before,
-  *::after {
-    box-sizing: border-box;
-  }
-
-  html {
-    -webkit-text-size-adjust: 100%;
-  }
+  html { -webkit-text-size-adjust: 100%; }
 
   body {
     margin: 0;
-    min-height: 100dvh;
-    background: var(--bg);
-    color: var(--fg);
-    font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Helvetica,
+    min-block-size: 100dvh;
+    color: var(--ink);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica,
       Arial, sans-serif;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
+    /* A lit plaster wall: warm base, soft window falloff, faint tint. */
+    background:
+      radial-gradient(120% 80% at 78% -10%, rgb(255 255 255 / 0.9) 0%, transparent 55%),
+      radial-gradient(90% 70% at 8% 105%, rgb(196 182 160 / 0.4) 0%, transparent 60%),
+      linear-gradient(168deg, var(--wall) 0%, var(--wall-deep) 100%);
+    background-attachment: fixed;
   }
 
-  img,
-  svg {
-    display: block;
-    max-width: 100%;
+  /* Plaster tooth. Sits above the page but below interaction. */
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    opacity: 0.32;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  }
+
+  img, svg { display: block; max-inline-size: 100%; }
+
+  /* Every interactive surface lifts and casts, per the house style. */
+  .clicky {
+    transition: transform 0.14s cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 0.22s ease, filter 0.22s ease;
+  }
+  .clicky:hover { transform: translateY(-1.5px); }
+  .clicky:active { transform: translateY(0.5px) scale(0.985); }
+  .clicky:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .clicky, .clicky:hover, .clicky:active { transition: none; transform: none; }
   }
 </style>
