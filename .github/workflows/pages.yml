@@ -35,9 +35,9 @@ jobs:
         env:
           SITE_URL: https://${{ github.repository_owner }}.github.io
           SITE_BASE: /${{ github.event.repository.name }}
-        # `npm run build` validates every WGSL entry against a real device
-        # first; there is no GPU on the runner, so the shader check runs
-        # separately from the site build and is allowed to be skipped here.
+        # Not `npm run build`: that validates every WGSL entry against a real
+        # device first, which CI already does on this same commit with vgpu's
+        # software renderer. This job only publishes what that commit builds to.
         run: npx astro build
       - uses: actions/upload-pages-artifact@v3
         with:
