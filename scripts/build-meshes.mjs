@@ -7,9 +7,17 @@
  *   header 40B  : "HGP2", vertexCount u32, indexCount u32, stride u32 (24),
  *                 meshMin f32x3, meshMax f32x3
  *   vertex 24B  : packed_position unorm16x4 (xyz in [meshMin,meshMax], w = AO)
- *                 packed_normal   snorm16x4
+ *                 packed_normal   snorm16x4 (w = rig part index / PART_SCALE)
  *                 packed_sphere   snorm16x4 (xyz sphere target, w = orb AO)
  *   indices     : uint16
+ *
+ * The rig is why `packed_normal.w` is no longer dead. Each Spline scene moves
+ * its subject in parts — the drone's four rotors turn, the arm's base and two
+ * joints swing, the humanoid's head and arms follow — and a single baked mesh
+ * cannot express that. So the joints those scenes are built around are read out
+ * of the GLB by name, every vertex is stamped with the part it belongs to, and
+ * the parts table is written beside the mesh for the page to pose at runtime.
+ * See `src/lib/prism/rig.ts`.
  */
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { NodeIO } from "@gltf-transform/core";
@@ -47,8 +55,23 @@ const AO_RAYS = 32;
 const AO_GRID = 72;
 const AO_MAX_STEPS = 26;
 
+/**
+ * The divisor the part index is stored under in `packed_normal.w`.
+ *
+ * snorm16 quantises to 1/32767, so an index over 64 round-trips exactly, and
+ * the shader recovers it with a single multiply and round. It has to match
+ * `PART_SCALE` in `hero-fractal-mesh.wgsl`.
+ */
+const PART_SCALE = 64;
+const MAX_PARTS = 8; // PART_SLOTS in hero-fractal-mesh.wgsl
+
 // Each Spline export also ships its presentation wordmark, a floor plane and a
 // camera target. Those dominate the bounding box, so keep only the subject.
+//
+// `joints` names the nodes each Spline scene animates, in the order they become
+// part indices — part 0 is always the rest of the subject. A node nested inside
+// another joint takes the inner part, and the parts table records the nesting
+// so a pose composes down the chain the way the scene's own hierarchy does.
 const MODELS = [
   {
     id: "drone",
@@ -56,6 +79,8 @@ const MODELS = [
     keep: ["Follow"],
     radius: 1.0,
     yaw: 0,
+    // Four `Wing > Rotation` hubs: the propellers, which the scene spins.
+    joints: [{ node: "Rotation", as: "rotor" }],
   },
   {
     id: "quadruped",
@@ -63,6 +88,8 @@ const MODELS = [
     keep: ["Group 11"],
     radius: 0.98,
     yaw: 0.6,
+    // The balloon dog's head, on the end of the nested lean groups.
+    joints: [{ node: "Group 7", as: "head" }],
   },
   {
     id: "manipulator",
@@ -70,6 +97,12 @@ const MODELS = [
     keep: ["Base Y Rotation", "Base"],
     radius: 1.0,
     yaw: -0.5,
+    // The arm's own three axes, named by the scene that drives them.
+    joints: [
+      { node: "Base Y Rotation", as: "base" },
+      { node: "1 Hand X rotation", as: "shoulder" },
+      { node: "2 Hand X Rotation", as: "elbow" },
+    ],
   },
   {
     id: "robot",
@@ -77,15 +110,27 @@ const MODELS = [
     keep: ["Bot"],
     radius: 1.02,
     yaw: 0,
+    // `Hand Instance` is the mirrored left arm; `Hand` is the right. Both are
+    // qualified by their parent, because the mesh at the end of each forearm is
+    // also called "Hand".
+    joints: [
+      { node: "Top part/Head", as: "head" },
+      { node: "Top part/Hand Instance", as: "armLeft" },
+      { node: "Top part/Hand", as: "armRight" },
+    ],
   },
 ];
 
 const io = new NodeIO().registerExtensions(KHRONOS_EXTENSIONS);
+const rigs = {};
 
 for (const model of MODELS) {
   process.stdout.write(`\n${model.id}: `);
   const doc = await io.read(model.src);
   prune(doc, model.keep);
+  // Before anything flattens the hierarchy: the joints are found by name in the
+  // tree Spline authored, and every vertex is stamped with the part it is in.
+  const joints = tagParts(doc, model.joints ?? []);
 
   await doc.transform(
     dedup(),
@@ -94,7 +139,7 @@ for (const model of MODELS) {
     weld({ tolerance: 0.0001 })
   );
 
-  let { positions, normals, indices } = collect(doc);
+  let { positions, normals, indices, parts } = collect(doc);
   process.stdout.write(`${positions.length / 3} verts -> `);
 
   // meshopt honours its error bound over the ratio, so tighten in passes until
@@ -105,7 +150,7 @@ for (const model of MODELS) {
     await doc.transform(
       simplify({ simplifier: MeshoptSimplifier, ratio, error, lockBorder: false })
     );
-    ({ positions, normals, indices } = collect(doc));
+    ({ positions, normals, indices, parts } = collect(doc));
     process.stdout.write(`${positions.length / 3} -> `);
   }
   if (positions.length / 3 > MAX_VERTICES) {
@@ -113,7 +158,7 @@ for (const model of MODELS) {
   }
 
   orient(positions, normals, model.yaw);
-  normalize(positions, model.radius);
+  const placement = normalize(positions, model.radius);
   // Spline bakes non-uniform scale into the node transforms, so the normals
   // arrive with arbitrary length; unit-length is required by both the occlusion
   // pass and the shader's fractal/sphere normal blend.
@@ -121,15 +166,20 @@ for (const model of MODELS) {
 
   const ao = occlusion(positions, normals, indices);
   const sphere = sphereDirections(positions);
-  const out = encode(positions, normals, indices, ao, sphere);
+  const out = encode(positions, normals, indices, ao, sphere, parts);
+  rigs[model.id] = rigTable(joints, positions, parts, model.yaw, placement);
 
   mkdirSync("public/glass/models", { recursive: true });
   writeFileSync(`public/glass/models/${model.id}.mesh`, out);
   console.log(
     `${positions.length / 3} verts, ${indices.length / 3} tris, ` +
-      `${(out.byteLength / 1024).toFixed(0)} KB`
+      `${(out.byteLength / 1024).toFixed(0)} KB, ` +
+      `parts ${rigs[model.id].map((part) => `${part.name}:${part.count}`).join(" ")}`
   );
 }
+
+writeFileSync("src/lib/glass/model-rigs.json", `${JSON.stringify(rigs, null, 2)}\n`);
+console.log("\nwrote src/lib/glass/model-rigs.json");
 
 /**
  * Keeps only the named subject subtrees. Ancestors are retained so the world
@@ -170,9 +220,176 @@ function prune(doc, keep) {
     if (!survive.has(node)) parent.removeChild(node);
 }
 
+/**
+ * Finds the joints each Spline scene animates and stamps every vertex with the
+ * part it belongs to, as a `_PART` attribute the rest of the pipeline carries.
+ *
+ * The tag has to be laid down here, before `flatten` and `join` dissolve the
+ * hierarchy, because the hierarchy is the only record of which vertices belong
+ * to a rotor rather than to the airframe. It survives the pipeline because
+ * `weld` compares whole vertices — two vertices in different parts never merge —
+ * and because `simplify` re-indexes attributes rather than interpolating them.
+ *
+ * A joint nested inside another takes the inner part, and its `parent` is the
+ * enclosing joint, so the page can compose a pose down the same chain.
+ */
+function tagParts(doc, joints) {
+  // Part 0 is the subject itself: everything no joint claims.
+  const parts = [{ name: "body", parent: -1, node: undefined }];
+  const path = [];
+
+  const walk = (node, parent) => {
+    path.push(node.getName());
+    let part = parent;
+    const joint = joints.find((candidate) => matchesPath(candidate.node, path));
+    if (joint) {
+      part = parts.length;
+      parts.push({ name: joint.as, parent, node });
+    }
+    stampPart(doc, node, part);
+    for (const child of node.listChildren()) walk(child, part);
+    path.pop();
+  };
+  for (const scene of doc.getRoot().listScenes())
+    for (const root of scene.listChildren()) walk(root, 0);
+
+  // Several nodes can answer to one name — the drone's four `Rotation` hubs —
+  // so a joint that matched more than once numbers its parts.
+  const total = new Map();
+  for (const part of parts) total.set(part.name, (total.get(part.name) ?? 0) + 1);
+  const used = new Map();
+  for (const part of parts) {
+    if ((total.get(part.name) ?? 0) < 2) continue;
+    const n = used.get(part.name) ?? 0;
+    used.set(part.name, n + 1);
+    part.name = `${part.name}.${n}`;
+  }
+
+  for (const joint of joints)
+    if (!parts.some((part) => part.node && matchesPath(joint.node, nodePath(part.node))))
+      throw new Error(`joint "${joint.node}" matched no node`);
+  if (parts.length > MAX_PARTS)
+    throw new Error(`${parts.length} parts exceeds the ${MAX_PARTS} the shader poses`);
+  return parts;
+}
+
+/**
+ * A joint selector is a trailing slice of a node's path — "Rotation" for any
+ * node so named, "Top part/Hand" when a name alone is ambiguous, as it is for
+ * the humanoid's arm and the mesh at the end of its forearm.
+ */
+function matchesPath(selector, path) {
+  const wanted = selector.split("/");
+  if (wanted.length > path.length) return false;
+  return wanted.every((name, i) => name === path[path.length - wanted.length + i]);
+}
+
+function nodePath(node) {
+  const path = [];
+  for (let n = node; n && typeof n.getName === "function"; n = n.getParentNode?.())
+    path.unshift(n.getName());
+  return path;
+}
+
+/**
+ * Writes one constant `_PART` value across a node's vertices.
+ *
+ * Spline instances share their mesh — the drone's four wings are one propeller
+ * drawn four times, and the humanoid's two arms are one arm mirrored — so the
+ * primitives are cloned per node first. The clone shares its position and normal
+ * accessors, costing nothing but the tag itself, and gives each instance a
+ * vertex range of its own to stamp.
+ */
+function stampPart(doc, node, part) {
+  const mesh = node.getMesh();
+  if (!mesh) return;
+  const copy = doc.createMesh(mesh.getName());
+  for (const prim of mesh.listPrimitives()) {
+    const pos = prim.getAttribute("POSITION");
+    if (!pos) continue;
+    const values = new Float32Array(pos.getCount()).fill(part);
+    copy.addPrimitive(
+      prim
+        .clone()
+        .setAttribute("_PART", doc.createAccessor().setType("SCALAR").setArray(values))
+    );
+  }
+  node.setMesh(copy);
+}
+
+/**
+ * The parts table the page poses the mesh with: where each joint's axis sits in
+ * the finished mesh's own coordinates, which way it turns, and how far the part
+ * reaches — all after the same orientation and normalisation the vertices went
+ * through, so the numbers are in the space the shader reads.
+ *
+ * The reach is a box rather than a radius because the page has to prove the
+ * posed model still fits inside the glass, and a swept box is the thing
+ * `pyramidInteriorScale` can be asked about.
+ */
+function rigTable(joints, P, parts, yaw, placement) {
+  const bounds = joints.map(() => ({
+    min: [Infinity, Infinity, Infinity],
+    max: [-Infinity, -Infinity, -Infinity],
+    count: 0,
+  }));
+  for (let i = 0; i < parts.length; i++) {
+    const box = bounds[parts[i]] ?? bounds[0];
+    box.count++;
+    for (let a = 0; a < 3; a++) {
+      box.min[a] = Math.min(box.min[a], P[i * 3 + a]);
+      box.max[a] = Math.max(box.max[a], P[i * 3 + a]);
+    }
+  }
+
+  return joints.map((joint, index) => {
+    const box = bounds[index];
+    const world = joint.node?.getWorldMatrix();
+    // A joint's own axes, taken from the column vectors of its world matrix so
+    // "spin about Y" means the propeller's Y, not the page's.
+    const axis = (column) => {
+      if (!world) return column === 1 ? [0, 1, 0] : column === 0 ? [1, 0, 0] : [0, 0, 1];
+      const v = placeDirection(
+        [world[column * 4], world[column * 4 + 1], world[column * 4 + 2]],
+        yaw
+      );
+      const length = Math.hypot(v[0], v[1], v[2]) || 1;
+      return v.map((value) => round(value / length));
+    };
+    return {
+      name: joint.name,
+      parent: joint.parent,
+      count: box.count,
+      pivot: world
+        ? placePoint([world[12], world[13], world[14]], yaw, placement).map(round)
+        : [0, 0, 0],
+      axes: { x: axis(0), y: axis(1), z: axis(2) },
+      min: box.count ? box.min.map(round) : [0, 0, 0],
+      max: box.count ? box.max.map(round) : [0, 0, 0],
+    };
+  });
+}
+
+/** Five decimals: enough for a pivot, short enough to read in the JSON. */
+function round(value) {
+  return Math.round(value * 1e5) / 1e5;
+}
+
+/** A source-space point, through the same yaw and normalisation the mesh took. */
+function placePoint(p, yaw, { centre, scale }) {
+  const [x, y, z] = placeDirection(p, yaw);
+  return [(x - centre[0]) * scale, (y - centre[1]) * scale, (z - centre[2]) * scale];
+}
+
+/** The yaw alone: a direction has no origin to be centred on or scaled about. */
+function placeDirection([x, y, z], yaw) {
+  const c = Math.cos(yaw), s = Math.sin(yaw);
+  return [c * x + s * z, y, -s * x + c * z];
+}
+
 /** Merges every primitive in the document into flat world-space arrays. */
 function collect(doc) {
-  const P = [], N = [], I = [];
+  const P = [], N = [], I = [], parts = [];
   for (const node of doc.getRoot().listNodes()) {
     const mesh = node.getMesh();
     if (!mesh) continue;
@@ -181,9 +398,11 @@ function collect(doc) {
       const pos = prim.getAttribute("POSITION");
       if (!pos) continue;
       const nrm = prim.getAttribute("NORMAL");
+      const part = prim.getAttribute("_PART");
       const idx = prim.getIndices();
       const base = P.length / 3;
       for (let i = 0; i < pos.getCount(); i++) {
+        parts.push(part ? Math.round(part.getScalar(i)) : 0);
         const p = pos.getElement(i, [0, 0, 0]);
         P.push(
           m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12],
@@ -201,7 +420,7 @@ function collect(doc) {
       else for (let i = 0; i < pos.getCount(); i++) I.push(base + i);
     }
   }
-  return { positions: P, normals: N, indices: I };
+  return { positions: P, normals: N, indices: I, parts };
 }
 
 /** Spline authors Y-up already; this only applies the per-model presentation yaw. */
@@ -217,7 +436,10 @@ function orient(P, N, yaw) {
   }
 }
 
-/** Centres on the bounding box and scales the bounding sphere to `radius`. */
+/**
+ * Centres on the bounding box and scales the bounding sphere to `radius`,
+ * returning the placement so a joint's pivot can be carried through it too.
+ */
 function normalize(P, radius) {
   let lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
   for (let i = 0; i < P.length; i += 3)
@@ -232,6 +454,7 @@ function normalize(P, radius) {
   const k = radius / (maxR || 1);
   for (let i = 0; i < P.length; i += 3)
     for (let a = 0; a < 3; a++) P[i + a] = (P[i + a] - c[a]) * k;
+  return { centre: c, scale: k };
 }
 
 /** Normalises in place; returns false when the source normals are unusable. */
@@ -462,7 +685,7 @@ function logDensityGradient(x, y, z, grid, W, H, floor) {
   ];
 }
 
-function encode(P, N, I, ao, sphere) {
+function encode(P, N, I, ao, sphere, parts) {
   const count = P.length / 3;
   let lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
   for (let i = 0; i < P.length; i += 3)
@@ -492,7 +715,7 @@ function encode(P, N, I, ao, sphere) {
       v.setUint16(o + a * 2, un((P[p + a] - lo[a]) / span[a]), true);
     v.setUint16(o + 6, un(ao[i]), true);
     for (let a = 0; a < 3; a++) v.setInt16(o + 8 + a * 2, sn(N[p + a]), true);
-    v.setInt16(o + 14, 0, true);
+    v.setInt16(o + 14, sn((parts?.[i] ?? 0) / PART_SCALE), true);
     for (let a = 0; a < 3; a++)
       v.setInt16(o + 16 + a * 2, sn(sphere[p + a] * SPHERE_RADIUS), true);
     v.setInt16(o + 22, sn(1), true); // orb state carries no occlusion

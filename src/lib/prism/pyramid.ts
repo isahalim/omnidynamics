@@ -135,6 +135,42 @@ export function pyramidInteriorScale(
   half: readonly [number, number, number],
   centre: Vec3
 ): number {
+  return interiorScale(
+    centre,
+    (normal) =>
+      Math.abs(normal[0]) * half[0] +
+      Math.abs(normal[1]) * half[1] +
+      Math.abs(normal[2]) * half[2]
+  );
+}
+
+/**
+ * The same, for a shape given as points rather than a box.
+ *
+ * A model that moves is measured this way, because a box is much too blunt an
+ * instrument for it: a shape that leans is still the same shape, but the box
+ * around it grows in every direction at once, and fitting to that box would
+ * shrink the platform to half its size for a lean of a few degrees. Asking each
+ * face how far the points actually reach toward it costs one pass over the
+ * poses and gives back the size the shape can honestly be drawn at.
+ */
+export function pyramidInteriorScalePoints(
+  points: readonly (readonly [number, number, number])[],
+  centre: Vec3
+): number {
+  return interiorScale(centre, (normal) => {
+    let reach = 0;
+    for (const point of points)
+      reach = Math.max(
+        reach,
+        normal[0] * point[0] + normal[1] * point[1] + normal[2] * point[2]
+      );
+    return reach;
+  });
+}
+
+/** The tightest of the four faces, given how far the shape reaches toward each. */
+function interiorScale(centre: Vec3, reachToward: (normal: Vec3) => number): number {
   return Math.min(
     ...PYRAMID_UNIT_CORNERS.map((corner) => {
       // The face opposite a corner has that corner's direction as its inward
@@ -143,11 +179,7 @@ export function pyramidInteriorScale(
       const room =
         PYRAMID_UNIT_PLANE -
         (normal[0] * centre[0] + normal[1] * centre[1] + normal[2] * centre[2]);
-      const reach =
-        Math.abs(normal[0]) * half[0] +
-        Math.abs(normal[1]) * half[1] +
-        Math.abs(normal[2]) * half[2];
-      return Math.max(0, room) / Math.max(reach, 1e-6);
+      return Math.max(0, room) / Math.max(reachToward(normal), 1e-6);
     })
   );
 }

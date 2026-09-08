@@ -15,6 +15,15 @@ import {
 
 const RUBBER_F0 = vec3f(0.028);
 
+/**
+ * How many rigid parts a model mesh can be posed in, and the divisor its part
+ * index is stored under in `packed_normal.w`. Both have to match
+ * `scripts/build-meshes.mjs`, which writes the tag, and `../prism/rig.ts`,
+ * which fills the table.
+ */
+const PART_SLOTS = 8;
+const PART_SCALE = 64.0;
+
 struct SoftRubberMaterial {
   baseColor: vec3f,
   roughness: f32,
@@ -36,6 +45,14 @@ struct MeshParams {
   material: SoftRubberMaterial,
   environmentRotation: mat4x4f,
   environmentExposure: f32,
+  /**
+   * Where each of the model's rigid parts stands this frame, in the mesh's own
+   * coordinates — the rotor turned on its hub, the arm swung on its base, the
+   * head turned toward the cursor. Slot 0 is the subject itself and is normally
+   * the identity; every unused slot is one too, so a mesh with no rig poses as
+   * the mesh it was baked as.
+   */
+  parts: array<mat4x4f, 8>,
 }
 @group(0) @binding(0) var<uniform> params: MeshParams;
 @group(0) @binding(1) var environmentTexture: texture_2d_array<f32>;
@@ -54,7 +71,19 @@ struct VertexOut {
   @location(2) packed_sphere: vec4f,
   @builtin(instance_index) instance: u32,
 ) -> VertexOut {
-  let decodedPosition = mix(params.meshMin, params.meshMax, packed_position.xyz);
+  let bakedPosition = mix(params.meshMin, params.meshMax, packed_position.xyz);
+  // Only a model mesh carries a rig. vgpu's own fractal ships 1.0 in this lane,
+  // which would read as a part it has no table for, so it is pinned to slot 0.
+  let part = select(
+    0,
+    clamp(i32(round(packed_normal.w * PART_SCALE)), 0, PART_SLOTS - 1),
+    params.wholeMesh > 0.5,
+  );
+  let pose = params.parts[part];
+  // The pose is rigid, so it moves the normal with the same matrix, and the
+  // sphere target is left where it is: every part resolves to the same orb.
+  let decodedPosition = (pose * vec4f(bakedPosition, 1.0)).xyz;
+  let posedNormal = (pose * vec4f(packed_normal.xyz, 0.0)).xyz;
   let sphereMix = heroFractalMorphMix(
     decodedPosition,
     params.sphereMix,
@@ -76,7 +105,7 @@ struct VertexOut {
     heroFractalWholeMeshMorph(fractalPosition, spherePosition, sphereMix),
     params.wholeMesh,
   );
-  let fractalNormal = heroFractalFaceNormal(packed_normal.xyz, instance);
+  let fractalNormal = heroFractalFaceNormal(posedNormal, instance);
   let morphNormal = transitionRotation * normalize(mix(
       fractalNormal,
       sphereNormal,

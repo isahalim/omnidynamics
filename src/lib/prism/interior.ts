@@ -25,7 +25,8 @@ import {
   type HeroFractalMaterial,
 } from "../glass/settings";
 import { PYRAMID_MODEL, pyramidInteriorScale } from "./pyramid";
-import { multiply4, spinModelMatrix } from "./matrix";
+import { IDENTITY_4, multiply4, spinModelMatrix } from "./matrix";
+import { PART_SLOTS, rigFor, type Rig } from "./rig";
 import type { Vec3 } from "./constants";
 import { BASE, withBase } from "../base";
 
@@ -33,13 +34,17 @@ const FRACTAL_MESH_URL = `${BASE}/glass/fractal-tetrahedron-l7.mesh`;
 const MORPH_DURATION_MS = 1040;
 
 /**
- * How far a model turns to follow the cursor, in radians. The camera's own
- * orbit is a few degrees of parallax on the whole scene; this is the shape
- * itself turning, which is what makes it read as an object you are looking
- * around. The orb is a sphere at rest, where a spin would be invisible.
+ * How far a model turns to follow the cursor when it has no rig of its own, in
+ * radians. The camera's own orbit is a few degrees of parallax on the whole
+ * scene; this is the shape itself turning, which is what makes it read as an
+ * object you are looking around. The orb is a sphere at rest, where a spin
+ * would be invisible.
  */
 const SPIN_YAW = 0.46;
 const SPIN_PITCH = 0.24;
+
+/** Every slot the shader poses, left as the identity. */
+const REST_PARTS: Float32Array[] = Array.from({ length: PART_SLOTS }, () => IDENTITY_4);
 
 export type PrismInteriorId = "fractal" | "drone" | "quadruped" | "manipulator" | "robot";
 
@@ -53,6 +58,8 @@ interface InteriorEntry {
   readonly offset: Vec3;
   /** Only a model turns under the cursor. */
   readonly spins: boolean;
+  /** What its Spline scene does with it, or undefined for the example's face. */
+  readonly rig: Rig | undefined;
   /**
    * 1 when the geometry is a whole model mesh rather than the example's single
    * tetrahedron face. The example's morph is authored for that face — a tip-led
@@ -94,6 +101,9 @@ export async function createPrismInterior(
   const entries = new Map<PrismInteriorId, InteriorEntry>();
   const meshes: { destroy?: () => void }[] = [];
   let disposed = false;
+  const reduceMotion =
+    typeof window !== "undefined" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   /**
    * A second draw over the example's geometry, held at full sphere: the orb the
    * model is turning into, drawn inside it while it turns.
@@ -143,15 +153,19 @@ export async function createPrismInterior(
       });
       await orbDraw.compile(target);
     }
+    const rig = isFractal ? undefined : rigFor(id, reduceMotion);
     entries.set(id, {
       draw: interiorDraw,
       meshMin: mesh.meshMin,
       meshMax: mesh.meshMax,
-      scale: isFractal ? HERO_FRACTAL_GLASS.fractalScale : fitScale(mesh.meshMin, mesh.meshMax),
+      scale: isFractal
+        ? HERO_FRACTAL_GLASS.fractalScale
+        : fitScale(mesh.meshMin, mesh.meshMax, rig),
       // The fractal fills the solid from its centre; a model is centred on its
       // own bounds and stands where the orb does.
       offset: isFractal ? [0, 0, 0] : [0, HERO_FRACTAL_GLASS.orbOffsetY, 0],
       spins: !isFractal,
+      rig,
       wholeMesh: isFractal ? 0 : 1,
     });
   };
@@ -168,11 +182,10 @@ export async function createPrismInterior(
   let morphStart = 0;
   let morphing = false;
   let orbTime = 0;
+  // The rig's own clock, which unlike the orb's runs whatever is in the glass:
+  // a propeller has to keep turning while the shape stands still.
+  let rigTime = 0;
   let epoch = 0;
-
-  const reduceMotion =
-    typeof window !== "undefined" &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   const entry = () => entries.get(current) ?? entries.get("fractal")!;
 
@@ -186,8 +199,9 @@ export async function createPrismInterior(
         morphing = false;
       }
     }
+    rigTime = (time - epoch) * 0.001;
     // The orb's wobble is the only thing in the glass that moves on its own.
-    if (sphereMix > 0) orbTime = (time - epoch) * 0.001;
+    if (sphereMix > 0) orbTime = rigTime;
   };
 
   /** How much of the orb fill is showing, 0 until the morph is well under way. */
@@ -212,14 +226,26 @@ export async function createPrismInterior(
       active.offset[2] * (1 - sphereMix),
     ];
     // Models turn toward the cursor and unwind as they morph back to the orb.
+    // A rigged one does the rest of what its Spline scene does as well: the
+    // whole subject leans and hovers, and each joint stands where the pose puts
+    // it. Everything the rig returns is already faded out by the morph, so at
+    // the orb the two shapes still meet as the same sphere.
     const spin = active.spins ? 1 - sphereMix : 0;
+    const pose = active.rig?.pose(frame.pointer, rigTime, sphereMix);
     const model = multiply4(
       PYRAMID_MODEL,
       spinModelMatrix(
         scale,
-        offset,
-        -frame.pointer[0] * SPIN_YAW * spin,
-        -frame.pointer[1] * SPIN_PITCH * spin
+        pose
+          ? [
+              offset[0] + pose.drift[0] * scale,
+              offset[1] + pose.drift[1] * scale,
+              offset[2] + pose.drift[2] * scale,
+            ]
+          : offset,
+        pose ? pose.yaw : -frame.pointer[0] * SPIN_YAW * spin,
+        pose ? pose.pitch : -frame.pointer[1] * SPIN_PITCH * spin,
+        pose ? pose.roll : 0
       )
     );
     const material = blendMaterial(HERO_FRACTAL_MATERIAL, HERO_ORB_MATERIAL, sphereMix);
@@ -236,6 +262,7 @@ export async function createPrismInterior(
         material,
         environmentRotation: frame.environmentRotation,
         environmentExposure: HERO_FRACTAL_GLASS.environmentExposure,
+        parts: pose ? pose.parts : REST_PARTS,
       },
       environmentTexture: environment,
       environmentSampler,
@@ -260,6 +287,7 @@ export async function createPrismInterior(
           material,
           environmentRotation: frame.environmentRotation,
           environmentExposure: HERO_FRACTAL_GLASS.environmentExposure,
+          parts: REST_PARTS,
         },
         environmentTexture: environment,
         environmentSampler,
@@ -316,7 +344,9 @@ export async function createPrismInterior(
   };
 
   return {
-    needsFrame: () => morphing || sphereMix > 0,
+    // A rig that moves on its own — a turning propeller, a hovering drone —
+    // needs frames even when nothing has been touched and nothing is morphing.
+    needsFrame: () => morphing || sphereMix > 0 || (entry().rig?.animated ?? false),
     bind,
     draws: () =>
       fillAmount() > 0 && orbDraw ? [orbDraw, entry().draw] : [entry().draw],
@@ -330,18 +360,29 @@ export async function createPrismInterior(
   };
 }
 
-/** The largest a model can be drawn and still clear every face of the glass. */
+/**
+ * The largest a model can be drawn and still clear every face of the glass — in
+ * every pose it can hold, not only the one it was baked in.
+ *
+ * A rigged model is measured by the box its joints, its lean and its hover can
+ * between them reach (see `rig.ts`), so a propeller that swings wider than the
+ * airframe, or a drone that rises as it hovers, is inside the solid the whole
+ * time rather than only at rest.
+ */
 function fitScale(
   meshMin: readonly [number, number, number],
-  meshMax: readonly [number, number, number]
+  meshMax: readonly [number, number, number],
+  rig?: Rig
 ): number {
+  const centre: Vec3 = [0, HERO_FRACTAL_GLASS.orbOffsetY, 0];
+  if (rig) return rig.fitScale(centre);
   return pyramidInteriorScale(
     [
       (meshMax[0] - meshMin[0]) / 2,
       (meshMax[1] - meshMin[1]) / 2,
       (meshMax[2] - meshMin[2]) / 2,
     ],
-    [0, HERO_FRACTAL_GLASS.orbOffsetY, 0]
+    centre
   );
 }
 
