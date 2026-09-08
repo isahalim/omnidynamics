@@ -21,7 +21,7 @@ const RUBBER_F0 = vec3f(0.028);
  * `scripts/build-meshes.mjs`, which writes the tag, and `../prism/rig.ts`,
  * which fills the table.
  */
-const PART_SLOTS = 12;
+const PART_SLOTS = 16;
 const PART_SCALE = 64.0;
 
 struct SoftRubberMaterial {
@@ -52,7 +52,7 @@ struct MeshParams {
    * the identity; every unused slot is one too, so a mesh with no rig poses as
    * the mesh it was baked as.
    */
-  parts: array<mat4x4f, 12>,
+  parts: array<mat4x4f, 16>,
 }
 @group(0) @binding(0) var<uniform> params: MeshParams;
 @group(0) @binding(1) var environmentTexture: texture_2d_array<f32>;

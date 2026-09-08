@@ -64,7 +64,7 @@ const AO_MAX_STEPS = 26;
  * `PART_SCALE` in `hero-fractal-mesh.wgsl`.
  */
 const PART_SCALE = 64;
-const MAX_PARTS = 12; // PART_SLOTS in hero-fractal-mesh.wgsl
+const MAX_PARTS = 16; // PART_SLOTS in hero-fractal-mesh.wgsl
 
 // Each Spline export also ships its presentation wordmark, a floor plane and a
 // camera target. Those dominate the bounding box, so keep only the subject.
@@ -116,12 +116,15 @@ const MODELS = [
     keep: ["Bot"],
     radius: 1.02,
     yaw: 0,
-    // Each arm runs shoulder > forearm > hand and each leg femur > shin, so the
-    // humanoid moves every limb rather than only its shoulders. `Hand Instance`
+    // `Top part` is everything above the waist, so it is the joint the humanoid
+    // twists on; each arm below it runs shoulder > forearm > hand, and each leg
+    // under it femur > shin, so it can turn the way a body turns rather than
+    // the way a turntable does. `Hand Instance`
     // is the mirrored left arm and `Hand` the right, as `Leg Left Instance` and
     // `Leg Left` are its legs; each is qualified by its parent, because the mesh
     // at the end of every forearm is also called "Hand".
     joints: [
+      { node: "Bot/Top part", as: "torso" },
       { node: "Top part/Head", as: "head" },
       { node: "Top part/Hand Instance", as: "armLeft" },
       { node: "Top part/Hand", as: "armRight" },

@@ -564,7 +564,7 @@
     {
       "name": "body",
       "parent": -1,
-      "count": 16285,
+      "count": 9624,
       "pivot": [
         0,
         0,
@@ -588,8 +588,45 @@
         ]
       },
       "min": [
-        -0.24955,
+        -0.20113,
         -0.15394,
+        -0.07241
+      ],
+      "max": [
+        0.21016,
+        0.27254,
+        0.09731
+      ]
+    },
+    {
+      "name": "torso",
+      "parent": 0,
+      "count": 6661,
+      "pivot": [
+        0,
+        0.15545,
+        -0.02326
+      ],
+      "axes": {
+        "x": [
+          1,
+          0,
+          0
+        ],
+        "y": [
+          0,
+          1,
+          0
+        ],
+        "z": [
+          0,
+          0,
+          1
+        ]
+      },
+      "min": [
+        -0.24955,
+        0.12164,
         -0.14277
       ],
       "max": [
@@ -600,7 +637,7 @@
     },
     {
       "name": "head",
-      "parent": 0,
+      "parent": 1,
       "count": 2802,
       "pivot": [
         0.00054,
@@ -637,7 +674,7 @@
     },
     {
       "name": "armLeft",
-      "parent": 0,
+      "parent": 1,
       "count": 2426,
       "pivot": [
         -0.32772,
@@ -674,7 +711,7 @@
     },
     {
       "name": "forearmLeft",
-      "parent": 2,
+      "parent": 3,
       "count": 1938,
       "pivot": [
         -0.34956,
@@ -711,7 +748,7 @@
     },
     {
       "name": "handLeft",
-      "parent": 3,
+      "parent": 4,
       "count": 2274,
       "pivot": [
         -0.34469,
@@ -748,7 +785,7 @@
     },
     {
       "name": "armRight",
-      "parent": 0,
+      "parent": 1,
       "count": 2426,
       "pivot": [
         0.32772,
@@ -785,7 +822,7 @@
     },
     {
       "name": "forearmRight",
-      "parent": 5,
+      "parent": 6,
       "count": 1938,
       "pivot": [
         0.34956,
@@ -822,7 +859,7 @@
     },
     {
       "name": "handRight",
-      "parent": 6,
+      "parent": 7,
       "count": 2274,
       "pivot": [
         0.34469,
@@ -896,7 +933,7 @@
     },
     {
       "name": "shinLeft",
-      "parent": 8,
+      "parent": 9,
       "count": 3820,
       "pivot": [
         -0.13606,
@@ -970,7 +1007,7 @@
     },
     {
       "name": "shinRight",
-      "parent": 10,
+      "parent": 11,
       "count": 3820,
       "pivot": [
         0.14526,
