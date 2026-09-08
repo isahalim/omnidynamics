@@ -1,11 +1,12 @@
 ---
 import Base from '../layouts/Base.astro';
+import { withBase } from "../lib/base";
 ---
 
 <Base title="Not found — Omnidynamics" description="Page not found.">
   <main>
     <h1>404</h1>
-    <p><a href="/">Back to omnidynamics.dev</a></p>
+    <p><a href={withBase("/")}>Back to omnidynamics.dev</a></p>
   </main>
 
   <style>

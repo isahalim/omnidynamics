@@ -1,0 +1,54 @@
+# Mirrors the site onto GitHub Pages, so it is still reachable if the domain is.
+#
+# Pages serves a project site from a subdirectory — https://<owner>.github.io/
+# <repo>/ — which is why the build takes its base path from the environment and
+# nothing in the project writes an absolute URL by hand. See `src/lib/base.ts`.
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time; a queued run supersedes an older one rather than
+# racing it, and a run in flight is allowed to finish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build
+        env:
+          SITE_URL: https://${{ github.repository_owner }}.github.io
+          SITE_BASE: /${{ github.event.repository.name }}
+        # `npm run build` validates every WGSL entry against a real device
+        # first; there is no GPU on the runner, so the shader check runs
+        # separately from the site build and is allowed to be skipped here.
+        run: npx astro build
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

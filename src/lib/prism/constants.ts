@@ -5,6 +5,8 @@
  * of side `PRISM_SIDE` centred on the origin, extruded between `PRISM_BACK_Z`
  * and `PRISM_FRONT_Z`, with the wall on z = 0 behind it.
  */
+import { BASE } from "../base";
+
 
 export type Vec2 = readonly [number, number];
 export type Vec3 = readonly [number, number, number];
@@ -48,7 +50,7 @@ export const PRISM_TRIANGLE: PrismTriangle = (() => {
  * bringing the +X base vertex round to face a camera on +Z, then scaled and
  * stood off the plaster by the clearance the prism keeps.
  */
-export const PYRAMID_MESH_URL = "/glass/rounded-tetrahedron.mesh";
+export const PYRAMID_MESH_URL = `${BASE}/glass/rounded-tetrahedron.mesh`;
 
 /** Circumradius, chosen so the silhouette covers what the prism's did. */
 export const PYRAMID_CIRCUMRADIUS = 0.37;
@@ -329,7 +331,7 @@ export const WALL_MATERIAL_SIZE: Vec2 = [512, 512];
 export const WALL_LIGHTING_SIZE: Vec2 = [512, 512];
 export const CAUSTIC_PROFILE_SIZE: Vec2 = [1024, 256];
 /** vgpu's authored window-light mask, mirrored into this project's assets. */
-export const WALL_LIGHT_MASK_URL = "/prism/wall-global-light-mask.webp";
+export const WALL_LIGHT_MASK_URL = `${BASE}/prism/wall-global-light-mask.webp`;
 
 export function clampBeamWidth(value: number): number {
   return Number.isFinite(value)

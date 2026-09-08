@@ -27,8 +27,9 @@ import {
 import { PYRAMID_MODEL, pyramidInteriorScale } from "./pyramid";
 import { multiply4, spinModelMatrix } from "./matrix";
 import type { Vec3 } from "./constants";
+import { BASE, withBase } from "../base";
 
-const FRACTAL_MESH_URL = "/glass/fractal-tetrahedron-l7.mesh";
+const FRACTAL_MESH_URL = `${BASE}/glass/fractal-tetrahedron-l7.mesh`;
 const MORPH_DURATION_MS = 1040;
 
 /**
@@ -302,7 +303,7 @@ export async function createPrismInterior(
     if (!entries.has(state)) {
       let pending = inflight.get(state);
       if (!pending) {
-        pending = register(state, `/glass/models/${state}.mesh`);
+        pending = register(state, withBase(`/glass/models/${state}.mesh`));
         inflight.set(state, pending);
         pending.catch(() => inflight.delete(state));
       }

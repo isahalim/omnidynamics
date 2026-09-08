@@ -35,6 +35,7 @@ import {
   type Vec2,
 } from "./constants";
 import { prismGeometry, prismShadowGeometry } from "./geometry";
+import { followPointer } from "./pointer";
 import {
   IDENTITY_FRAMING,
   applyProjectionFraming,
@@ -82,6 +83,13 @@ export interface PrismRendererOptions {
 
 export interface PrismRenderer {
   readonly ready: Promise<void>;
+  /**
+   * Puts the scene back on screen after the browser restored the page from its
+   * back/forward cache, where nothing was disposed but no frame was ever asked
+   * for again. Re-measuring is what a restore may actually need — the window
+   * can have been resized while the page was away.
+   */
+  resume(): void;
   dispose(): void;
 }
 
@@ -319,24 +327,13 @@ export function createPrismRenderer(options: PrismRendererOptions): PrismRendere
     request();
   };
 
-  const onPointerMove = (event: PointerEvent) => {
-    if (event.pointerType && event.pointerType !== "mouse") return;
-    pointerTarget = [
-      Math.min(1, Math.max(-1, (event.clientX / Math.max(window.innerWidth, 1)) * 2 - 1)),
-      Math.min(1, Math.max(-1, (event.clientY / Math.max(window.innerHeight, 1)) * 2 - 1)),
-    ];
-    lampArcTarget = clamp01(event.clientY / Math.max(window.innerHeight, 1));
-    request();
-  };
+  let releasePointer: (() => void) | undefined;
 
-  const resetPointer = () => {
-    pointerTarget = [0, 0];
-    lampArcTarget = PRISM_DEFAULT_ARC;
+  /** The lamp swings with the pointer's height, which is the same number. */
+  const aimAt = (position: Vec2) => {
+    pointerTarget = position;
+    lampArcTarget = clamp01(position[1] * 0.5 + 0.5);
     request();
-  };
-
-  const onPointerOut = (event: PointerEvent) => {
-    if (event.relatedTarget === null) resetPointer();
   };
 
   const onVisibility = () => {
@@ -355,9 +352,7 @@ export function createPrismRenderer(options: PrismRendererOptions): PrismRendere
     observer?.disconnect();
     visibilityObserver?.disconnect();
     window.removeEventListener("resize", resize);
-    window.removeEventListener("pointermove", onPointerMove);
-    window.removeEventListener("pointerout", onPointerOut);
-    window.removeEventListener("blur", resetPointer);
+    releasePointer?.();
     document.removeEventListener("visibilitychange", onVisibility);
     frameObserver?.disconnect();
     assets?.dispose();
@@ -487,9 +482,17 @@ export function createPrismRenderer(options: PrismRendererOptions): PrismRendere
     });
     visibilityObserver.observe(options.canvas);
     window.addEventListener("resize", resize);
-    window.addEventListener("pointermove", onPointerMove, { passive: true });
-    window.addEventListener("pointerout", onPointerOut);
-    window.addEventListener("blur", resetPointer);
+    releasePointer = followPointer({
+      onMove: aimAt,
+      // A finger has no hover to lose, so it leaves the beam where it put it;
+      // this only fires for a mouse crossing the window edge.
+      onLeave: () => {
+        pointerTarget = [0, 0];
+        lampArcTarget = PRISM_DEFAULT_ARC;
+        request();
+      },
+      read: () => pointerTarget,
+    });
     document.addEventListener("visibilitychange", onVisibility);
     if (options.frame) {
       frameObserver = new ResizeObserver(resize);
@@ -505,5 +508,13 @@ export function createPrismRenderer(options: PrismRendererOptions): PrismRendere
     throw error;
   });
 
-  return { ready, dispose };
+  return {
+    ready,
+    resume() {
+      if (disposed) return;
+      resize();
+      request();
+    },
+    dispose,
+  };
 }

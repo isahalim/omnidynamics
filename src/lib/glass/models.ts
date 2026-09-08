@@ -2,6 +2,7 @@ import type { Geometry, Gpu } from "vgpu";
 
 import { decodeMesh } from "./hero-glass-assets-core";
 import { registerInterior, type HeroFractalScene } from "./scene";
+import { withBase } from "../base";
 
 export type PrismState = "orb" | "drone" | "quadruped" | "manipulator" | "robot";
 
@@ -10,14 +11,40 @@ export interface PrismStateInfo {
   readonly label: string;
   /** Where a click on the shape leads, or null while the product is unbuilt. */
   readonly href: string | null;
+  /**
+   * What the shape in the glass is, for the landing page's copy. Only the
+   * shipped tool has anything to say for itself; the rest say what a click on
+   * them does, which is all there is to know until they exist.
+   */
+  readonly blurb?: string;
+  /** The line under it, in the smaller size. */
+  readonly hint: string;
 }
 
 export const PRISM_STATES: readonly PrismStateInfo[] = [
-  { id: "orb", label: "Orb", href: "https://mythosengine.omnidynamics.dev/" },
-  { id: "drone", label: "Drone", href: null },
-  { id: "quadruped", label: "Quadruped", href: null },
-  { id: "manipulator", label: "Manipulator", href: null },
-  { id: "robot", label: "Robot", href: null },
+  {
+    id: "orb",
+    label: "Mythos Engine",
+    href: "https://mythosengine.omnidynamics.dev/",
+    blurb:
+      "A tool that automates content generation and captivates audiences — " +
+      "scripts, scenes and voice, from a prompt to a finished piece.",
+    hint: "Click the orb to use it",
+  },
+  { id: "drone", label: "Drone", href: null, hint: "Click the drone for information" },
+  {
+    id: "quadruped",
+    label: "Quadruped",
+    href: null,
+    hint: "Click the quadruped for information",
+  },
+  {
+    id: "manipulator",
+    label: "Manipulator",
+    href: null,
+    hint: "Click the manipulator for information",
+  },
+  { id: "robot", label: "Robot", href: null, hint: "Click the robot for information" },
 ];
 
 /** The orb is vgpu's own fractal geometry held at full sphere morph. */
@@ -44,7 +71,7 @@ export function ensureInterior(
   if (pending) return pending;
 
   pending = (async () => {
-    const url = `/glass/models/${id}.mesh`;
+    const url = withBase(`/glass/models/${id}.mesh`);
     const response = await fetch(url, { signal });
     if (!response.ok) throw new Error(`Failed to load ${url}: ${response.status}`);
     const buffer = await response.arrayBuffer();
@@ -73,7 +100,7 @@ export function prefetchInteriors(): void {
     const link = document.createElement("link");
     link.rel = "prefetch";
     link.as = "fetch";
-    link.href = `/glass/models/${state.id}.mesh`;
+    link.href = withBase(`/glass/models/${state.id}.mesh`);
     link.crossOrigin = "anonymous";
     document.head.append(link);
   }

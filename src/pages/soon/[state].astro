@@ -3,6 +3,7 @@ import Base from "../../layouts/Base.astro";
 import Logo from "../../components/Logo.astro";
 import LightPrism from "../../components/LightPrism.astro";
 import { PRISM_STATES } from "../../lib/glass/models";
+import { withBase } from "../../lib/base";
 
 export function getStaticPaths() {
   return PRISM_STATES.filter((state) => state.href === null).map((state) => ({
@@ -40,12 +41,12 @@ const headline = HEADLINE[state.id]!;
 
   <div class="page">
     <header class="top">
-      <a class="brand clicky" href="/">
+      <a class="brand clicky" href={withBase("/")}>
         <Logo size={30} />
         <span class="wordmark">OmniDynamics</span>
       </a>
       <nav class="links">
-        <a class="clicky" href="/">Prism</a>
+        <a class="clicky" href={withBase("/")}>Tools</a>
         <a class="clicky" href="mailto:hello@omnidynamics.dev">Contact</a>
       </nav>
     </header>
@@ -66,7 +67,7 @@ const headline = HEADLINE[state.id]!;
               {index > 0 && <span class="dot" aria-hidden="true">·</span>}
               <a
                 class:list={["tab", { on: entry.id === state.id }]}
-                href={`/soon/${entry.id}/`}
+                href={withBase(`/soon/${entry.id}/`)}
                 aria-current={entry.id === state.id ? "page" : undefined}
               >
                 {entry.label}
@@ -212,7 +213,13 @@ const headline = HEADLINE[state.id]!;
 
   /* Reserves the prism's share of the frame. Nothing is drawn in it — the
      renderer measures the box and fits the glass to it on the canvas behind. */
-  .stage { min-block-size: 60vh; }
+  /* A finger aims the beam by dragging where the prism is drawn, so that box
+     must not read the drag as a scroll. Only that box: the copy beside it stays
+     scrollable on a phone, and pinch is left alone everywhere. */
+  .stage {
+    min-block-size: 60vh;
+    touch-action: pinch-zoom;
+  }
 
   /* One column: the copy holds the frame and the prism recentres behind it. */
   @media (max-width: 60rem) {

@@ -2,6 +2,7 @@
 import Base from "../layouts/Base.astro";
 import Logo from "../components/Logo.astro";
 import Prism from "../components/Prism.astro";
+import { withBase } from "../lib/base";
 ---
 
 <Base
@@ -11,12 +12,12 @@ import Prism from "../components/Prism.astro";
   <div class="page">
     <!-- Not a bar: the header sits directly on the wall with the prism. -->
     <header class="top">
-      <a class="brand clicky" href="/">
+      <a class="brand clicky" href={withBase("/")}>
         <Logo />
         <span class="wordmark">OmniDynamics</span>
       </a>
 
-      <a class="contact clicky" href="/contact/">Contact</a>
+      <a class="contact clicky" href={withBase("/contact/")}>Contact</a>
     </header>
 
     <main>

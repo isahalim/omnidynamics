@@ -49,6 +49,7 @@ import {
   type ProjectionFraming,
 } from "./framing";
 import { createPrismInterior, type PrismInterior, type PrismInteriorId } from "./interior";
+import { followPointer } from "./pointer";
 import {
   PYRAMID_MODEL,
   PYRAMID_MODEL_INVERSE,
@@ -92,6 +93,13 @@ export interface HeroRenderer {
   readonly ready: Promise<void>;
   /** Morphs to another platform inside the glass, through the orb. */
   setState(state: PrismInteriorId): Promise<void>;
+  /**
+   * Puts the scene back on screen after the browser restored the page from its
+   * back/forward cache, where nothing was disposed but no frame was ever asked
+   * for again. Re-measuring is what a restore may actually need — the window
+   * can have been resized while the page was away.
+   */
+  resume(): void;
   dispose(): void;
 }
 
@@ -307,23 +315,7 @@ export function createHeroRenderer(options: HeroRendererOptions): HeroRenderer {
     request();
   };
 
-  const onPointerMove = (event: PointerEvent) => {
-    if (event.pointerType && event.pointerType !== "mouse") return;
-    pointerTarget = [
-      Math.min(1, Math.max(-1, (event.clientX / Math.max(window.innerWidth, 1)) * 2 - 1)),
-      Math.min(1, Math.max(-1, (event.clientY / Math.max(window.innerHeight, 1)) * 2 - 1)),
-    ];
-    request();
-  };
-
-  const resetPointer = () => {
-    pointerTarget = [0, 0];
-    request();
-  };
-
-  const onPointerOut = (event: PointerEvent) => {
-    if (event.relatedTarget === null) resetPointer();
-  };
+  let releasePointer: (() => void) | undefined;
 
   const onVisibility = () => {
     if (!document.hidden) request();
@@ -342,9 +334,7 @@ export function createHeroRenderer(options: HeroRendererOptions): HeroRenderer {
     frameObserver?.disconnect();
     visibilityObserver?.disconnect();
     window.removeEventListener("resize", resize);
-    window.removeEventListener("pointermove", onPointerMove);
-    window.removeEventListener("pointerout", onPointerOut);
-    window.removeEventListener("blur", resetPointer);
+    releasePointer?.();
     document.removeEventListener("visibilitychange", onVisibility);
     interior?.dispose();
     glass?.dispose();
@@ -467,9 +457,19 @@ export function createHeroRenderer(options: HeroRendererOptions): HeroRenderer {
     });
     visibilityObserver.observe(options.canvas);
     window.addEventListener("resize", resize);
-    window.addEventListener("pointermove", onPointerMove, { passive: true });
-    window.addEventListener("pointerout", onPointerOut);
-    window.addEventListener("blur", resetPointer);
+    releasePointer = followPointer({
+      onMove: (position) => {
+        pointerTarget = position;
+        request();
+      },
+      // A finger has no hover to lose, so it leaves the view where it put it;
+      // this only fires for a mouse crossing the window edge.
+      onLeave: () => {
+        pointerTarget = [0, 0];
+        request();
+      },
+      read: () => pointerTarget,
+    });
     document.addEventListener("visibilitychange", onVisibility);
     if (options.frame) {
       frameObserver = new ResizeObserver(resize);
@@ -490,6 +490,11 @@ export function createHeroRenderer(options: HeroRendererOptions): HeroRenderer {
     async setState(state: PrismInteriorId) {
       request();
       await interior?.setState(state);
+      request();
+    },
+    resume() {
+      if (disposed) return;
+      resize();
       request();
     },
     dispose,

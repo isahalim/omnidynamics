@@ -83,6 +83,15 @@ const { frame = "" } = Astro.props;
         console.error("prism renderer failed", error);
       }
     );
-    window.addEventListener("pagehide", () => renderer.dispose(), { once: true });
+    // Back-navigation restores this page from the browser's cache without
+    // running the script again, so a renderer torn down on the way out would
+    // leave a dead canvas. Nothing is disposed when the page is only being put
+    // aside; it is woken instead.
+    window.addEventListener("pagehide", (event) => {
+      if (!event.persisted) renderer.dispose();
+    });
+    window.addEventListener("pageshow", (event) => {
+      if (event.persisted) renderer.resume();
+    });
   }
 </script>

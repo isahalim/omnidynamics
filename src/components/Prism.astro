@@ -1,5 +1,8 @@
 ---
 import { PRISM_STATES } from "../lib/glass/models";
+
+/** The page opens on the orb, so its copy is the copy that ships in the HTML. */
+const opening = PRISM_STATES[0]!;
 ---
 
 {/*
@@ -22,6 +25,17 @@ import { PRISM_STATES } from "../lib/glass/models";
 
   <p id="prism-status" class="status" role="status" aria-live="polite"></p>
 
+  {/*
+    What is in the glass, beside it. The shipped tool says what it is; the rest
+    say what a click on them does. It sits in the gutter to the left of the
+    pyramid on a wide screen — the shape fills the frame by its height, so that
+    gutter is bare plaster — and drops under the shape on a narrow one.
+  */}
+  <div class="about" id="prism-about">
+    <p class="blurb" id="prism-blurb">{opening.blurb}</p>
+    <p class="hint" id="prism-hint">{opening.hint}</p>
+  </div>
+
   <div class="picker" role="group" aria-label="Platform">
     {PRISM_STATES.map((state) => (
       <button
@@ -34,8 +48,6 @@ import { PRISM_STATES } from "../lib/glass/models";
       </button>
     ))}
   </div>
-
-  <div id="warp" class="warp" hidden></div>
 </section>
 
 <style>
@@ -61,7 +73,7 @@ import { PRISM_STATES } from "../lib/glass/models";
     z-index: 2;
     flex: 1;
     display: grid;
-    grid-template-rows: 1fr auto;
+    grid-template-rows: 1fr auto auto;
     gap: clamp(0.75rem, 2vh, 1.5rem);
     padding-block-end: clamp(1.25rem, 4vh, 3rem);
     min-block-size: clamp(22rem, 66vh, 46rem);
@@ -73,7 +85,12 @@ import { PRISM_STATES } from "../lib/glass/models";
      to take the frame — everything but the header and the picker — rather than
      to sit politely in the middle of it. */
   .hit {
+    grid-row: 1;
     place-self: center;
+    /* A finger turns the shape, so a drag across it must not be read as a
+       scroll. Only the shape's own box takes the gesture — on a small phone the
+       page may still need to scroll, and pinch is left alone everywhere. */
+    touch-action: pinch-zoom;
     inline-size: min(54rem, 68vw);
     block-size: min(54rem, 70vh);
     border: 0;
@@ -88,7 +105,7 @@ import { PRISM_STATES } from "../lib/glass/models";
   @media (max-width: 48rem) {
     .hit {
       inline-size: 90vw;
-      block-size: min(90vw, 56vh);
+      block-size: min(90vw, 52vh);
     }
   }
   .hit:focus-visible {
@@ -111,7 +128,52 @@ import { PRISM_STATES } from "../lib/glass/models";
   }
   .status.on { opacity: 1; }
 
+  .about {
+    grid-row: 2;
+    justify-self: center;
+    max-inline-size: 32rem;
+    margin: 0;
+    text-align: center;
+    transition: opacity 0.24s ease;
+  }
+  .about.changing { opacity: 0; }
+
+  .blurb {
+    margin: 0;
+    font-size: clamp(1rem, 1.35vw, 1.1rem);
+    line-height: 1.45;
+    color: var(--ink);
+  }
+  .blurb:empty { display: none; }
+
+  .hint {
+    margin: 0.5rem 0 0;
+    font-size: 0.8125rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  /* Wide enough for a gutter: the copy moves out beside the glass, and the
+     shape takes the whole height of the frame again. The row it is pinned to is
+     the shape's own, because an absolutely positioned grid child is placed
+     against its grid area rather than against the grid — pinned to its old row
+     it would centre itself on a row of no height. */
+  @media (min-width: 60rem) {
+    .about {
+      grid-row: 1;
+      position: absolute;
+      inset-block-start: 50%;
+      inset-inline-start: 0;
+      translate: 0 -50%;
+      inline-size: min(19rem, 24vw);
+      max-inline-size: none;
+      text-align: start;
+    }
+  }
+
   .picker {
+    grid-row: 3;
     justify-self: center;
     display: flex;
     flex-wrap: wrap;
@@ -129,7 +191,7 @@ import { PRISM_STATES } from "../lib/glass/models";
   }
 
   .chip {
-    min-inline-size: 5.75rem;
+    min-inline-size: 5rem;
     padding: 0.6rem 1.05rem;
     border: 0;
     border-radius: 999px;
@@ -149,25 +211,6 @@ import { PRISM_STATES } from "../lib/glass/models";
   }
   .chip[disabled] { opacity: 0.45; cursor: progress; }
 
-  /* Zoom-through: the orb swallows the viewport before navigation. */
-  .warp {
-    position: fixed;
-    inset: 0;
-    z-index: 50;
-    pointer-events: none;
-    background: radial-gradient(circle at var(--x, 50%) var(--y, 45%), #07070a 0 22%, transparent 60%);
-    opacity: 0;
-    transform: scale(0.25);
-    transform-origin: var(--x, 50%) var(--y, 45%);
-  }
-  .warp.go {
-    animation: swallow 620ms cubic-bezier(0.7, 0, 0.84, 0) forwards;
-  }
-  @keyframes swallow {
-    from { opacity: 0.2; transform: scale(0.25); }
-    to   { opacity: 1;   transform: scale(9); }
-  }
-
   .sr-only {
     position: absolute;
     inline-size: 1px; block-size: 1px;
@@ -176,8 +219,7 @@ import { PRISM_STATES } from "../lib/glass/models";
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .wall, .status { transition: none; }
-    .warp.go { animation-duration: 1ms; }
+    .wall, .status, .about { transition: none; }
   }
 </style>
 
@@ -190,18 +232,21 @@ import { PRISM_STATES } from "../lib/glass/models";
     prefetchInteriors,
     type PrismState,
   } from "../lib/glass/models";
+  import { withBase } from "../lib/base";
 
   const canvas = document.getElementById("prism") as HTMLCanvasElement | null;
   const status = document.getElementById("prism-status");
   const hit = document.getElementById("prism-hit") as HTMLButtonElement | null;
-  const warp = document.getElementById("warp");
+  const about = document.getElementById("prism-about");
+  const blurb = document.getElementById("prism-blurb");
+  const hint = document.getElementById("prism-hint");
   const picker = document.querySelector<HTMLElement>(".picker");
-  if (!canvas || !status || !hit || !warp || !picker) {
+  if (!canvas || !status || !hit || !about || !blurb || !hint || !picker) {
     throw new Error("prism markup missing");
   }
 
   const chips = [...picker.querySelectorAll<HTMLButtonElement>(".chip")];
-  const hrefFor = new Map(PRISM_STATES.map((s) => [s.id, s.href] as const));
+  const infoFor = new Map(PRISM_STATES.map((s) => [s.id, s] as const));
 
   const say = (message: string) => {
     status.textContent = message;
@@ -237,10 +282,23 @@ import { PRISM_STATES } from "../lib/glass/models";
     }
   );
 
+  /** Swaps the copy beside the glass, fading through so it does not jump. */
+  const describe = (state: PrismState) => {
+    const info = infoFor.get(state);
+    if (!info) return;
+    about.classList.add("changing");
+    window.setTimeout(() => {
+      blurb.textContent = info.blurb ?? "";
+      hint.textContent = info.hint;
+      about.classList.remove("changing");
+    }, 200);
+  };
+
   const select = async (next: PrismState, chip: HTMLButtonElement) => {
     if (next === current) return;
     current = next;
     for (const c of chips) c.setAttribute("aria-pressed", String(c === chip));
+    describe(next);
 
     const slow = window.setTimeout(() => say("Loading"), 260);
     for (const c of chips) c.disabled = true;
@@ -263,23 +321,39 @@ import { PRISM_STATES } from "../lib/glass/models";
     });
   }
 
-  /** The orb zooms through to the product; every other shape opens its page. */
-  hit.addEventListener("click", (event) => {
-    event.preventDefault();
-    const href = hrefFor.get(current) ?? `/soon/${current}/`;
-    if (current !== "orb") {
-      window.location.href = href;
-      return;
-    }
-    const box = hit.getBoundingClientRect();
-    warp.style.setProperty("--x", `${((box.left + box.width / 2) / window.innerWidth) * 100}%`);
-    warp.style.setProperty("--y", `${((box.top + box.height / 2) / window.innerHeight) * 100}%`);
-    warp.hidden = false;
-    warp.classList.add("go");
-    const go = () => { window.location.href = href; };
-    warp.addEventListener("animationend", go, { once: true });
-    window.setTimeout(go, 900); // guard if the animation never fires
+  /**
+   * A click on the shape opens it. A finger dragging the shape around also ends
+   * in a click, so a pointer that travelled more than a few pixels is a turn
+   * rather than a tap and is not followed.
+   */
+  const TAP_SLOP = 10;
+  let pressedAt: { x: number; y: number } | undefined;
+
+  hit.addEventListener("pointerdown", (event) => {
+    pressedAt = { x: event.clientX, y: event.clientY };
   });
 
-  window.addEventListener("pagehide", () => renderer.dispose(), { once: true });
+  hit.addEventListener("click", (event) => {
+    event.preventDefault();
+    const travelled = pressedAt
+      ? Math.hypot(event.clientX - pressedAt.x, event.clientY - pressedAt.y)
+      : 0;
+    pressedAt = undefined;
+    if (travelled > TAP_SLOP) return;
+    window.location.href = infoFor.get(current)?.href ?? withBase(`/soon/${current}/`);
+  });
+
+  /**
+   * Back-navigation restores this page from the browser's cache without running
+   * the script again, so a renderer torn down on the way out would leave a dead
+   * canvas — a bare wall with a working picker over it. Nothing is disposed
+   * when the page is only being put aside; it is woken instead, and disposed
+   * for real only when the page is actually going away.
+   */
+  window.addEventListener("pagehide", (event) => {
+    if (!event.persisted) renderer.dispose();
+  });
+  window.addEventListener("pageshow", (event) => {
+    if (event.persisted) renderer.resume();
+  });
 </script>

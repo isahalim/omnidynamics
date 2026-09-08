@@ -6,10 +6,11 @@ import {
   type HeroGlassAssets,
 } from "./hero-glass-assets-core";
 export type { HeroGlassAssets } from "./hero-glass-assets-core";
+import { BASE } from "../base";
 
-const FRACTAL_MESH_URL = "/glass/fractal-tetrahedron-l7.mesh";
-const ENVIRONMENT_URL = "/glass/studio-cubemap-prefiltered.png";
-const WALL_URL = "/glass/wall-material.png";
+const FRACTAL_MESH_URL = `${BASE}/glass/fractal-tetrahedron-l7.mesh`;
+const ENVIRONMENT_URL = `${BASE}/glass/studio-cubemap-prefiltered.png`;
+const WALL_URL = `${BASE}/glass/wall-material.png`;
 
 /** Just the studio, for a page that brings its own wall and its own glass. */
 export async function loadStudioCubemap(gpu: Gpu, signal?: AbortSignal) {
