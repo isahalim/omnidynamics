@@ -145,7 +145,7 @@ export function pyramidInteriorScale(
 }
 
 /**
- * The same, for a shape given as points rather than a box.
+ * The same, for a shape given as the points it reaches rather than as a box.
  *
  * A model that moves is measured this way, because a box is much too blunt an
  * instrument for it: a shape that leans is still the same shape, but the box
@@ -153,33 +153,44 @@ export function pyramidInteriorScale(
  * shrink the platform to half its size for a lean of a few degrees. Asking each
  * face how far the points actually reach toward it costs one pass over the
  * poses and gives back the size the shape can honestly be drawn at.
+ *
+ * The points arrive through a visitor rather than in a list because there are
+ * hundreds of thousands of them — every corner of every part, in every pose the
+ * rig can hold — and all the fit wants from them is four numbers. Handing them
+ * over one at a time keeps the whole sweep to those four.
  */
-export function pyramidInteriorScalePoints(
-  points: readonly (readonly [number, number, number])[],
+export function pyramidInteriorScaleReached(
+  sweep: (reach: (x: number, y: number, z: number) => void) => void,
   centre: Vec3
 ): number {
-  return interiorScale(centre, (normal) => {
-    let reach = 0;
-    for (const point of points)
-      reach = Math.max(
-        reach,
-        normal[0] * point[0] + normal[1] * point[1] + normal[2] * point[2]
-      );
-    return reach;
+  const normals = PYRAMID_UNIT_CORNERS.map(
+    (corner) => corner.map((value) => -value) as unknown as Vec3
+  );
+  const reached = normals.map(() => 0);
+  sweep((x, y, z) => {
+    for (let face = 0; face < normals.length; face++) {
+      const normal = normals[face]!;
+      const toward = normal[0] * x + normal[1] * y + normal[2] * z;
+      if (toward > reached[face]!) reached[face] = toward;
+    }
   });
+  return interiorScale(centre, (_normal, face) => reached[face]!);
 }
 
 /** The tightest of the four faces, given how far the shape reaches toward each. */
-function interiorScale(centre: Vec3, reachToward: (normal: Vec3) => number): number {
+function interiorScale(
+  centre: Vec3,
+  reachToward: (normal: Vec3, face: number) => number
+): number {
   return Math.min(
-    ...PYRAMID_UNIT_CORNERS.map((corner) => {
+    ...PYRAMID_UNIT_CORNERS.map((corner, face) => {
       // The face opposite a corner has that corner's direction as its inward
       // normal, and sits `PYRAMID_UNIT_PLANE` from the centre.
       const normal = corner.map((value) => -value) as unknown as Vec3;
       const room =
         PYRAMID_UNIT_PLANE -
         (normal[0] * centre[0] + normal[1] * centre[1] + normal[2] * centre[2]);
-      return Math.max(0, room) / Math.max(reachToward(normal), 1e-6);
+      return Math.max(0, room) / Math.max(reachToward(normal, face), 1e-6);
     })
   );
 }
