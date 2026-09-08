@@ -460,6 +460,10 @@ export function setHeroFractalSceneSettings(
       meshMin: interior.meshMin,
       meshMax: interior.meshMax,
       sphereMix: glass.sphereMix * (settings.morphDirection ?? 1),
+    wholeMesh: 0,
+      // The example draws only its own tetrahedron face, which its morph is
+      // authored for.
+      wholeMesh: 0,
       time,
       material,
       environmentRotation,
@@ -481,6 +485,7 @@ export function setHeroFractalSceneSettings(
     environmentRotation,
     fractalModel,
     sphereMix: glass.sphereMix * (settings.morphDirection ?? 1),
+    wholeMesh: 0,
     time,
   };
 }

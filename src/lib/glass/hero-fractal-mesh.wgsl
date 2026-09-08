@@ -2,8 +2,9 @@ import { presentCeramic } from "./hero-fractal-presentation.wgsl";
 import {
   heroFractalFaceNormal,
   heroFractalFacePosition,
+  heroFractalMorphMix,
   heroFractalSkillRotation,
-  heroFractalSphereMix,
+  heroFractalWholeMeshMorph,
   heroFractalSphereNormal,
   heroFractalSpherePosition,
 } from "./hero-fractal-face-instance.wgsl";
@@ -29,6 +30,8 @@ struct MeshParams {
   meshMin: vec3f,
   meshMax: vec3f,
   sphereMix: f32,
+  /** 1 for a whole model mesh, 0 for the example's tetrahedron face. */
+  wholeMesh: f32,
   time: f32,
   material: SoftRubberMaterial,
   environmentRotation: mat4x4f,
@@ -52,7 +55,11 @@ struct VertexOut {
   @builtin(instance_index) instance: u32,
 ) -> VertexOut {
   let decodedPosition = mix(params.meshMin, params.meshMax, packed_position.xyz);
-  let sphereMix = heroFractalSphereMix(decodedPosition, params.sphereMix);
+  let sphereMix = heroFractalMorphMix(
+    decodedPosition,
+    params.sphereMix,
+    params.wholeMesh,
+  );
   let fractalPosition = heroFractalFacePosition(decodedPosition, instance);
   let sphereSourcePosition = heroFractalFacePosition(
     packed_sphere.xyz,
@@ -65,9 +72,9 @@ struct VertexOut {
   let sphereNormal = heroFractalSphereNormal(sphereSourcePosition, params.time);
   let transitionRotation = heroFractalSkillRotation(sphereMix);
   let morphPosition = transitionRotation * mix(
-    fractalPosition,
-    spherePosition,
-    sphereMix,
+    mix(fractalPosition, spherePosition, sphereMix),
+    heroFractalWholeMeshMorph(fractalPosition, spherePosition, sphereMix),
+    params.wholeMesh,
   );
   let fractalNormal = heroFractalFaceNormal(packed_normal.xyz, instance);
   let morphNormal = transitionRotation * normalize(mix(

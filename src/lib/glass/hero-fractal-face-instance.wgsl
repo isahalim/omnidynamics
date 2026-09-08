@@ -35,6 +35,61 @@ export fn heroFractalSphereMix(position: vec3f, signedProgress: f32) -> f32 {
   return localProgress * localProgress * (3.0 - 2.0 * localProgress);
 }
 
+// The stagger above is authored for the one tetrahedron face the example
+// morphs: its vertices span exactly the radius range the delay is written in,
+// and all four instances of it shear together into the same sphere. A whole
+// model mesh is not that shape. The stagger sends its extremities ahead of its
+// body, and because the transition rotation below follows the same per-vertex
+// progress, the parts that lead and the parts that lag turn by different
+// angles — which shears the mesh into pieces on the way to the orb. So a model
+// morphs on one even progress, `wholeMesh` being 1 for a model and 0 for the
+// example's face.
+export fn heroFractalMorphMix(
+  position: vec3f,
+  signedProgress: f32,
+  wholeMesh: f32,
+) -> f32 {
+  let progress = clamp(abs(signedProgress), 0.0, 1.0);
+  let even = progress * progress * (3.0 - 2.0 * progress);
+  return mix(
+    heroFractalSphereMix(position, signedProgress),
+    even,
+    clamp(wholeMesh, 0.0, 1.0),
+  );
+}
+
+// The path a vertex takes to its orb position.
+//
+// The example's sphere target is an authored map from its face onto a spherical
+// triangle, and a straight line to it is well behaved. A model's is not
+// authored: it is the vertex's own direction taken to the orb's radius, so the
+// vertex and its target lie on one ray from the centre and the whole morph is
+// radial. Interpolating that radius linearly is what tears the mesh. A vertex
+// deeper than the orb's radius travels outward while one further out travels
+// in, and where two points on the same ray cross, the surface between them
+// turns inside out — the back faces are culled and a hole opens, which is the
+// break in the arm and the sheared humanoid.
+//
+// Interpolating the logarithm of the radius instead keeps them in order: the
+// radius stays a monotone function of where the vertex started at every point
+// in the morph, so no two points on a ray can pass through one another, and
+// both ends are still exactly the authored ones.
+export fn heroFractalWholeMeshMorph(
+  shape: vec3f,
+  sphere: vec3f,
+  progress: f32,
+) -> vec3f {
+  let shapeRadius = max(length(shape), 0.0001);
+  let sphereRadius = max(length(sphere), 0.0001);
+  let radius = exp(mix(log(shapeRadius), log(sphereRadius), progress));
+  // The two directions are the same ray up to the orb's own wobble, so this is
+  // a short interpolation and never crosses the origin.
+  let direction = normalize(
+    mix(shape / shapeRadius, sphere / sphereRadius, progress),
+  );
+  return direction * radius;
+}
+
 // Rotate each vertex with the same delayed progress used by its morph. This
 // sends the tetrahedron tips first and lets the turn travel toward the deeper
 // cavity vertices instead of rotating the whole object as a rigid body.

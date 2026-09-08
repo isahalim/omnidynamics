@@ -1,0 +1,182 @@
+---
+/**
+ * Contact, on the same wall the coming-soon pages stand on.
+ *
+ * It mounts the same `LightPrism` they do — vgpu's light pipeline, its glass
+ * prism, the beam through it and the spectrum it throws, following the cursor —
+ * and fits it to the same measured column beside the copy. Nothing here is a
+ * second copy of that renderer: the component is the one those pages use, so
+ * the backdrop is theirs by construction rather than by resemblance.
+ */
+import Base from "../layouts/Base.astro";
+import Logo from "../components/Logo.astro";
+import LightPrism from "../components/LightPrism.astro";
+
+const EMAIL = "suzanhalim29@gmail.com";
+---
+
+<Base
+  title="Contact — OmniDynamics"
+  description="Talk to OmniDynamics about drones, quadrupeds, manipulators and humanoids."
+>
+  <LightPrism frame="#prism-stage" />
+
+  <div class="page">
+    <header class="top">
+      <a class="brand clicky" href="/">
+        <Logo size={30} />
+        <span class="wordmark">OmniDynamics</span>
+      </a>
+      <nav class="links">
+        <a class="clicky" href="/">Prism</a>
+      </nav>
+    </header>
+
+    <main class="split">
+      <div class="copy">
+        <h1>Contact</h1>
+        <p class="lede">
+          Tell us what you are building.<br />We read everything.
+        </p>
+
+        <div class="rule" aria-hidden="true"></div>
+
+        {/* The address itself is the content of the page, so it is set as text
+            at display size and is selectable — not hidden behind a label. */}
+        <p class="address">
+          <a class="clicky" href={`mailto:${EMAIL}`}>{EMAIL}</a>
+        </p>
+
+        <p class="note">
+          Early access, partnerships, or a question about a platform — the same
+          address reaches us for all of it.
+        </p>
+      </div>
+
+      {/* Measured, never painted: the box the prism is fitted into. */}
+      <div class="stage" id="prism-stage" aria-hidden="true"></div>
+    </main>
+  </div>
+</Base>
+
+<style>
+  .page {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    min-block-size: 100dvh;
+    padding: clamp(1rem, 2.5vw, 1.75rem) clamp(1.25rem, 4vw, 3.5rem)
+      clamp(1.5rem, 4vh, 3rem);
+    color: var(--on-wall);
+  }
+
+  .top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    text-decoration: none;
+    color: inherit;
+    border-radius: 999px;
+  }
+
+  .wordmark {
+    font-size: 1rem;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+  }
+
+  .links {
+    display: flex;
+    gap: clamp(1rem, 2.5vw, 2rem);
+    font-size: 0.9375rem;
+  }
+  .links a {
+    color: inherit;
+    text-decoration: none;
+    opacity: 0.62;
+    transition: opacity 0.2s ease;
+  }
+  .links a:hover { opacity: 1; }
+
+  .split {
+    flex: 1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    align-items: center;
+    gap: clamp(1rem, 4vw, 3rem);
+  }
+
+  .copy {
+    max-inline-size: 34rem;
+    padding-inline-start: clamp(0rem, 2vw, 2rem);
+  }
+
+  h1 {
+    margin: 0;
+    font-family: ui-serif, Georgia, "Iowan Old Style", "Times New Roman", serif;
+    font-weight: 400;
+    font-size: clamp(3.25rem, 10vw, 8rem);
+    line-height: 0.86;
+    letter-spacing: -0.02em;
+  }
+
+  .lede {
+    margin: clamp(1rem, 3vh, 2rem) 0 0;
+    font-size: clamp(1.5rem, 3.1vw, 2.6rem);
+    line-height: 1.16;
+    font-weight: 300;
+    letter-spacing: -0.015em;
+  }
+
+  .rule {
+    inline-size: min(100%, 22rem);
+    block-size: 1px;
+    margin-block: clamp(1.25rem, 3vh, 2rem);
+    background: currentColor;
+    opacity: 0.28;
+  }
+
+  /* The address wraps on a narrow phone rather than pushing the wall sideways. */
+  .address {
+    margin: 0;
+    font-size: clamp(1.15rem, 2.6vw, 1.9rem);
+    letter-spacing: -0.01em;
+    overflow-wrap: anywhere;
+  }
+  .address a {
+    color: inherit;
+    text-decoration: none;
+    border-block-end: 1px solid currentColor;
+    padding-block-end: 0.08em;
+    display: inline-block;
+  }
+  .address a:hover { opacity: 0.75; }
+
+  .note {
+    margin: clamp(1rem, 2.5vh, 1.5rem) 0 0;
+    max-inline-size: 26rem;
+    font-size: 1.0625rem;
+    line-height: 1.5;
+    opacity: 0.68;
+  }
+
+  .stage { min-block-size: 60vh; }
+
+  @media (max-width: 60rem) {
+    .split {
+      grid-template-columns: 1fr;
+      align-content: center;
+      gap: clamp(1.5rem, 5vh, 3rem);
+    }
+    .stage { min-block-size: 34vh; order: -1; }
+    .copy { padding-inline-start: 0; }
+  }
+</style>

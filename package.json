@@ -9,7 +9,9 @@
     "preview": "wrangler dev",
     "check": "astro check",
     "check:shaders": "node scripts/check-shaders.mjs",
-    "deploy": "astro build && wrangler deploy"
+    "deploy": "astro build && wrangler deploy",
+    "build:icons": "node scripts/build-icons.mjs",
+    "build:meshes": "node scripts/build-meshes.mjs"
   },
   "devDependencies": {
     "@gltf-transform/core": "^4.5.0",

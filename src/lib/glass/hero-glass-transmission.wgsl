@@ -1,4 +1,5 @@
 import { presentCeramic } from "./hero-fractal-presentation.wgsl";
+import { heroGlassFaceCaustic } from "./hero-glass-face-caustic.wgsl";
 import {
   rotateHeroEnvironmentDirection,
   sampleHeroEnvironment,
@@ -18,6 +19,15 @@ const V1 = vec3f(0.94280904158, -0.33333333333, 0.0);
 const V2 = vec3f(-0.47140452079, -0.33333333333, 0.81649658093);
 const V3 = vec3f(-0.47140452079, -0.33333333333, -0.81649658093);
 const TETRAHEDRON_PLANE = 0.33333333333;
+
+// How much of the face caustic reaches the front faces, its colour — slightly
+// warm, as the wall's own light is — and the share of it that shows on a face
+// the studio is not lighting.
+const FACE_CAUSTIC_STRENGTH = 0.9;
+const FACE_CAUSTIC_TINT = vec3f(1.0, 0.982, 0.951);
+const FACE_CAUSTIC_AMBIENT = 0.35;
+/** The share of it that survives on a face looked at straight on. */
+const FACE_CAUSTIC_FRONTAL = 0.2;
 
 struct GlassParams {
   viewProjection: mat4x4f,
@@ -50,6 +60,11 @@ struct VertexOut {
   @builtin(position) position: vec4f,
   @location(0) worldPosition: vec3f,
   @location(1) worldNormal: vec3f,
+  // The face caustic is generated on the four planes above, so it is carried
+  // in the coordinates they are written in rather than reconstructed from the
+  // world position through `modelInverse`.
+  @location(2) localPosition: vec3f,
+  @location(3) localNormal: vec3f,
 };
 
 @vertex fn vs_main(
@@ -62,6 +77,8 @@ struct VertexOut {
   out.position = params.viewProjection * world;
   out.worldPosition = world.xyz;
   out.worldNormal = normalize((params.model * vec4f(packed_normal.xyz, 0.0)).xyz);
+  out.localPosition = localPosition;
+  out.localNormal = packed_normal.xyz;
   return out;
 }
 
@@ -271,9 +288,34 @@ fn sampleInterior(uv: vec2f, halfTexel: vec2f) -> vec3f {
     vec3f(0.0),
     vec3f(1.0),
   );
+
+  // The face's own caustic is light arriving on the face, so it is screened in
+  // beside the studio panels rather than tinted into the transmission. It is
+  // weighted by what that face is catching: a filament only reads as light if
+  // the face is turned toward some, which is what makes the four faces
+  // brighten and dim against each other as the solid turns.
+  let faceCaustic = heroGlassFaceCaustic(in.localPosition, in.localNormal);
+  // Grazing faces carry most of it. The light has further to travel through
+  // the glass to leave by a face turned away, so that is where it folds hardest
+  // — and it keeps the web off the face you are looking through into the
+  // platform, where it would read as a smear on the glass rather than light in
+  // it.
+  let faceCausticHighlight = clamp(
+    FACE_CAUSTIC_TINT * faceCaustic * FACE_CAUSTIC_STRENGTH * (
+      FACE_CAUSTIC_AMBIENT +
+      (1.0 - FACE_CAUSTIC_AMBIENT) * clamp(environmentLuminance, 0.0, 1.0)
+    ) * (
+      FACE_CAUSTIC_FRONTAL +
+      (1.0 - FACE_CAUSTIC_FRONTAL) * pow(1.0 - facing, 2.4)
+    ),
+    vec3f(0.0),
+    vec3f(1.0),
+  );
+
   let finalGlass = 1.0 - (
     (1.0 - clamp(physicalGlass, vec3f(0.0), vec3f(1.0)))
     * (1.0 - studioPanelHighlight)
+    * (1.0 - faceCausticHighlight)
   );
   return vec4f(finalGlass, 1.0);
 }

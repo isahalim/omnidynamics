@@ -20,6 +20,28 @@ import { MeshoptSimplifier } from "meshoptimizer";
 // vgpu's own fractal puts every sphere-target vertex at this radius; matching it
 // makes a geometry swap at full morph invisible.
 const SPHERE_RADIUS = 0.4966;
+// The spherical grid the morph target is equalised on, and the schedule of
+// blur radii (in cells) it is equalised at. See `sphereDirections`.
+const SPHERE_GRID = [192, 96];
+const SPHERE_EQUALIZE = [
+  { blur: 24, steps: 80, rate: 0.9 },
+  { blur: 12, steps: 70, rate: 0.7 },
+  { blur: 6, steps: 60, rate: 0.55 },
+  { blur: 3, steps: 50, rate: 0.45 },
+];
+/**
+ * The density a direction has to reach before it stops being pulled at, as a
+ * share of the even cover.
+ *
+ * Flowing all the way to an even cover is the wrong target: it moves every
+ * vertex, and these meshes arrive as hundreds of disconnected pieces, so a
+ * subject that already closes into a sphere — the drone, the quadruped — comes
+ * out shattered into fragments sliding over one another. Clamping the density
+ * at this floor before the gradient is taken means a direction that is already
+ * covered feels no pull at all, and only the neighbourhood of a bald patch
+ * flows. Every mesh then moves as little as it has to.
+ */
+const SPHERE_DENSITY_FLOOR = 1.0;
 const MAX_VERTICES = 65535; // uint16 index space
 const AO_RAYS = 32;
 const AO_GRID = 72;
@@ -98,7 +120,8 @@ for (const model of MODELS) {
   if (!unitize(normals)) computeNormals(positions, indices, normals);
 
   const ao = occlusion(positions, normals, indices);
-  const out = encode(positions, normals, indices, ao);
+  const sphere = sphereDirections(positions);
+  const out = encode(positions, normals, indices, ao, sphere);
 
   mkdirSync("public/glass/models", { recursive: true });
   writeFileSync(`public/glass/models/${model.id}.mesh`, out);
@@ -299,7 +322,147 @@ function fibonacci(n) {
   return out;
 }
 
-function encode(P, N, I, ao) {
+/**
+ * Where each vertex goes when the shape becomes the orb.
+ *
+ * It used to be the vertex's own direction, taken to the orb's radius. For a
+ * compact subject that is already a sphere — the drone's body and the
+ * quadruped's cover nearly every direction out of their centre, so projecting
+ * them outward closes into one. A robot arm does not: two fifths of the
+ * directions around its centre have no surface in them at all, and the "orb" it
+ * morphs into is a ribbon with a hole through it. That is what tore in the
+ * transition, and why the swap to the real orb at the end of the morph — the
+ * swap the whole transition is built on being invisible — popped.
+ *
+ * So the directions are spread until they cover the sphere evenly, and spread
+ * by a field that is a smooth function of direction alone: the directions are
+ * splatted into a spherical grid, the grid is blurred, and every direction
+ * slides down the gradient of the log density, crowded directions pushing into
+ * empty ones. Because one field moves every vertex, neighbours stay neighbours
+ * — the surface stretches over the sphere instead of shredding across it — and
+ * the blur is annealed from broad to fine so the far side of a bald patch is
+ * felt before the last of the unevenness is smoothed out.
+ */
+function sphereDirections(P) {
+  const [W, H] = SPHERE_GRID;
+  const count = P.length / 3;
+  const D = new Float64Array(P.length);
+  for (let i = 0; i < count; i++) {
+    const o = i * 3;
+    const length = Math.hypot(P[o], P[o + 1], P[o + 2]) || 1;
+    D[o] = P[o] / length;
+    D[o + 1] = P[o + 1] / length;
+    D[o + 2] = P[o + 2] / length;
+  }
+
+  const cell = Math.PI / H;
+  const density = new Float64Array(W * H);
+  const blurred = new Float64Array(W * H);
+  const scratch = new Float64Array(W * H);
+  const floor = (SPHERE_DENSITY_FLOOR * count) / (4 * Math.PI);
+
+  for (const pass of SPHERE_EQUALIZE) {
+    const scale = pass.blur * cell;
+    const step = pass.rate * scale * scale;
+    const maxStep = 0.5 * scale;
+    for (let iteration = 0; iteration < pass.steps; iteration++) {
+      splat(D, density, W, H);
+      blur(density, blurred, scratch, W, H, pass.blur);
+      for (let i = 0; i < count; i++) {
+        const o = i * 3;
+        const [gradientTheta, gradientPhi] = logDensityGradient(
+          D[o], D[o + 1], D[o + 2], blurred, W, H, floor
+        );
+        // Down the gradient: out of the crowd and into the empty directions.
+        const theta = Math.acos(Math.max(-1, Math.min(1, D[o + 1])));
+        const phi = Math.atan2(D[o + 2], D[o]);
+        const sinTheta = Math.max(Math.sin(theta), 1e-3);
+        let moveTheta = -step * gradientTheta;
+        let movePhi = -step * gradientPhi / sinTheta;
+        const move = Math.hypot(moveTheta, movePhi * sinTheta);
+        if (move > maxStep) {
+          moveTheta *= maxStep / move;
+          movePhi *= maxStep / move;
+        }
+        const nextTheta = Math.max(1e-3, Math.min(Math.PI - 1e-3, theta + moveTheta));
+        const nextPhi = phi + movePhi;
+        D[o] = Math.sin(nextTheta) * Math.cos(nextPhi);
+        D[o + 1] = Math.cos(nextTheta);
+        D[o + 2] = Math.sin(nextTheta) * Math.sin(nextPhi);
+      }
+    }
+  }
+  return D;
+}
+
+/** Bilinear splat of the directions into the equirectangular grid. */
+function splat(D, grid, W, H) {
+  grid.fill(0);
+  const cellPhi = (2 * Math.PI) / W;
+  const cellTheta = Math.PI / H;
+  for (let o = 0; o < D.length; o += 3) {
+    const theta = Math.acos(Math.max(-1, Math.min(1, D[o + 1])));
+    const phi = Math.atan2(D[o + 2], D[o]);
+    const u = ((phi / (2 * Math.PI) + 1) % 1) * W - 0.5;
+    const v = (theta / Math.PI) * H - 0.5;
+    const u0 = Math.floor(u), v0 = Math.floor(v);
+    const fu = u - u0, fv = v - v0;
+    for (let dv = 0; dv <= 1; dv++)
+      for (let du = 0; du <= 1; du++) {
+        const y = v0 + dv;
+        if (y < 0 || y >= H) continue;
+        const x = ((u0 + du) % W + W) % W;
+        grid[y * W + x] += (du ? fu : 1 - fu) * (dv ? fv : 1 - fv);
+      }
+  }
+  // Per unit solid angle, so an even cover reads as an even density rather
+  // than as a crowd at the poles.
+  for (let y = 0; y < H; y++) {
+    const area = Math.max(Math.sin(((y + 0.5) / H) * Math.PI), 1e-3) * cellPhi * cellTheta;
+    for (let x = 0; x < W; x++) grid[y * W + x] /= area;
+  }
+}
+
+/** Separable box blur, wrapping in longitude and clamping at the poles. */
+function blur(source, target, scratch, W, H, radius) {
+  const width = 2 * radius + 1;
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++) {
+      let sum = 0;
+      for (let d = -radius; d <= radius; d++)
+        sum += source[y * W + (((x + d) % W) + W) % W];
+      scratch[y * W + x] = sum / width;
+    }
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++) {
+      let sum = 0;
+      for (let d = -radius; d <= radius; d++)
+        sum += scratch[Math.max(0, Math.min(H - 1, y + d)) * W + x];
+      target[y * W + x] = sum / width;
+    }
+}
+
+/**
+ * The gradient of log density at a direction, in (theta, phi), with the density
+ * clamped from below so a well-covered direction reads as flat.
+ */
+function logDensityGradient(x, y, z, grid, W, H, floor) {
+  const theta = Math.acos(Math.max(-1, Math.min(1, y)));
+  const phi = Math.atan2(z, x);
+  const u = ((phi / (2 * Math.PI) + 1) % 1) * W;
+  const v = (theta / Math.PI) * H;
+  const at = (du, dv) => {
+    const gx = ((Math.floor(u + du) % W) + W) % W;
+    const gy = Math.max(0, Math.min(H - 1, Math.floor(v + dv)));
+    return Math.log(Math.max(grid[gy * W + gx], floor) + 1e-6);
+  };
+  return [
+    ((at(0, 1) - at(0, -1)) / 2) * (H / Math.PI),
+    ((at(1, 0) - at(-1, 0)) / 2) * (W / (2 * Math.PI)),
+  ];
+}
+
+function encode(P, N, I, ao, sphere) {
   const count = P.length / 3;
   let lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
   for (let i = 0; i < P.length; i += 3)
@@ -330,9 +493,8 @@ function encode(P, N, I, ao) {
     v.setUint16(o + 6, un(ao[i]), true);
     for (let a = 0; a < 3; a++) v.setInt16(o + 8 + a * 2, sn(N[p + a]), true);
     v.setInt16(o + 14, 0, true);
-    const len = Math.hypot(P[p], P[p + 1], P[p + 2]) || 1;
     for (let a = 0; a < 3; a++)
-      v.setInt16(o + 16 + a * 2, sn((P[p + a] / len) * SPHERE_RADIUS), true);
+      v.setInt16(o + 16 + a * 2, sn(sphere[p + a] * SPHERE_RADIUS), true);
     v.setInt16(o + 22, sn(1), true); // orb state carries no occlusion
   }
 

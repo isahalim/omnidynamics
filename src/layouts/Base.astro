@@ -21,7 +21,24 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     <meta property="og:type" content="website" />
     <meta property="og:url" content={canonical} />
     <meta name="theme-color" content="#d2ccc2" />
+    {/*
+      The mark, everywhere something asks for one. The SVG is the tab icon and
+      the only copy that follows the browser's chrome from black to white; the
+      PNGs are the black mark on the site's own plaster, because a home screen
+      composites a transparent icon on black. Without `apple-touch-icon` iOS
+      draws its own tile — a grey square with the first letter of the title —
+      which is what "Add to Home Screen" was producing.
+    */}
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-96.png" type="image/png" sizes="96x96" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <meta name="apple-mobile-web-app-title" content="OmniDynamics" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="default"
+    />
   </head>
   <body>
     <slot />

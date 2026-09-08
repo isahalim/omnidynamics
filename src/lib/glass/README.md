@@ -20,7 +20,25 @@ directory it uses:
   the ray there and `model` brings the sample point back. That is the only
   change to the material.
 - **`hero-fractal-mesh.wgsl`** and its imports — the shape inside the glass,
-  with vgpu's morph and its four tetrahedral face instances.
+  with vgpu's morph and its four tetrahedral face instances. One thing was
+  added: `wholeMesh`, which is 1 for the model meshes the landing page holds and
+  0 for the example's own geometry. vgpu's morph is authored for a single
+  tetrahedron face — a tip-led stagger over the radius range that face's
+  vertices span, travelling to a sphere target its own map produced — and a
+  whole model mesh run through it shears into pieces on the way to the orb. A
+  whole mesh morphs on one even progress instead, and along the ray its own
+  sphere target lies on: `heroFractalWholeMeshMorph` interpolates the *log* of
+  the radius, which keeps two points on a ray in order rather than letting a
+  vertex inside the orb's radius cross one outside it and turn the surface
+  inside out. Where those targets come from is
+  `scripts/build-meshes.mjs`.
+
+- **`hero-glass-face-caustic.wgsl`** (ours) — the light on the glass's own four
+  faces. Each fragment is assigned to the face its normal points along, given a
+  frame built from that face's edge, and carries a different piece of a folded
+  light field at its own turn and scale; `hero-glass.wgsl` and
+  `hero-glass-transmission.wgsl` screen it in. Without it the four faces are
+  flat grey triangles and nothing on a face says which way it is turned.
 - **`hero-glass-assets-core.ts`** — `decodeMesh` and `createStudioCubemap`;
   `hero-glass-assets.ts` adds the browser adapters that fetch them.
 - **`settings.ts`** — vgpu's own glass and material controls, including where

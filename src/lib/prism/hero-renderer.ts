@@ -255,7 +255,9 @@ export function createHeroRenderer(options: HeroRendererOptions): HeroRenderer {
           pass.draw(pipeline.castShadow);
           pass.draw(pipeline.caustic);
           pass.draw(pipeline.glassBack);
-          if (currentInterior) pass.draw(currentInterior.draw());
+          if (currentInterior) {
+            for (const interiorDraw of currentInterior.draws()) pass.draw(interiorDraw);
+          }
         }
       );
       current.pass({ target: currentSurface }, (pass) => {

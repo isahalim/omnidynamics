@@ -1,4 +1,5 @@
 import { presentCeramic } from "./hero-fractal-presentation.wgsl";
+import { heroGlassFaceCaustic } from "./hero-glass-face-caustic.wgsl";
 import {
   rotateHeroEnvironmentDirection,
   sampleHeroEnvironment,
@@ -28,10 +29,19 @@ struct GlassParams {
 @group(0) @binding(1) var environmentTexture: texture_2d_array<f32>;
 @group(0) @binding(2) var environmentSampler: sampler;
 
+// The two faces behind the solid carry the same caustic as the two in front,
+// weaker: they are read through the glass by the transmission pass, which
+// refracts and frosts them, so they only have to be there.
+const FACE_CAUSTIC_STRENGTH = 0.5;
+const FACE_CAUSTIC_TINT = vec3f(1.0, 0.982, 0.951);
+
 struct VertexOut {
   @builtin(position) position: vec4f,
   @location(0) worldPosition: vec3f,
   @location(1) worldNormal: vec3f,
+  /** The mesh's own coordinates, the frame the face caustic is written in. */
+  @location(2) localPosition: vec3f,
+  @location(3) localNormal: vec3f,
 };
 
 @vertex fn vs_main(
@@ -44,6 +54,8 @@ struct VertexOut {
   out.position = params.viewProjection * world;
   out.worldPosition = world.xyz;
   out.worldNormal = normalize((params.model * vec4f(packed_normal.xyz, 0.0)).xyz);
+  out.localPosition = localPosition;
+  out.localNormal = packed_normal.xyz;
   return out;
 }
 
@@ -71,5 +83,11 @@ fn premultiplied(color: vec3f, alpha: f32) -> vec4f {
     0.0,
     0.85,
   );
-  return premultiplied(presentCeramic(reflected).rgb, alpha);
+  // The face this fragment belongs to is chosen from the raw outward normal,
+  // not the one flipped toward the camera: flipped, every back face would be
+  // assigned to the face opposite it and carry that face's pattern.
+  let faceCaustic = heroGlassFaceCaustic(in.localPosition, in.localNormal);
+  let lit = presentCeramic(reflected).rgb +
+    FACE_CAUSTIC_TINT * faceCaustic * FACE_CAUSTIC_STRENGTH;
+  return premultiplied(clamp(lit, vec3f(0.0), vec3f(1.0)), alpha);
 }
