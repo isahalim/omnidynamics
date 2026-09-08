@@ -65,13 +65,12 @@ interface Joint {
    */
   readonly episode?: readonly [number, number, number, number];
   /**
-   * A move it makes on the body's stride rather than on a clock of its own:
-   * radians at the top of a pace, and which paces it is made on — 0 for every
-   * other one from the first, 1 for the ones between, 2 for all of them. It
-   * rises and falls inside the pace, so a leg that swings round on one pace is
-   * back under the body in time to push on the next.
+   * An angle it simply holds, before anything else moves it. This is posture
+   * rather than motion — a head carried up, an arm floated away from the body —
+   * so unlike everything else here it survives a reduced-motion setting, which
+   * takes away movement and not the pose the subject is in.
    */
-  readonly pace?: readonly [number, number];
+  readonly rest?: number;
 }
 
 /** What the whole subject does, above and beyond its joints. */
@@ -84,38 +83,13 @@ interface Body {
   readonly bob?: readonly [number, number];
   /** The same, sideways, a quarter out of step with the bob. */
   readonly sway?: readonly [number, number];
-  /** The walk it takes itself round on, now and then. */
-  readonly stride?: Stride;
-}
-
-/**
- * The stride a subject turns itself round on.
- *
- * A yaw laid over the whole subject is a turntable however smoothly it runs:
- * the feet slide, and nothing in the body accounts for the turn. So this yaw
- * does not run smoothly. It advances one pace at a time, stands on the spot
- * between them, and the joints that make each pace — the knee that lifts, the
- * leg that swings round to the new heading, the one that pushes against the
- * ground, the torso that leads and the arms that counterweight — are declared
- * against the same paces with `pace`.
- *
- * The circle is taken a piece at a time rather than in one sweep: each pace is
- * a step and then a stand, so the subject turns a little, looks at what is now
- * in front of it, and turns again. Over the whole walk it comes round a full
- * turn, which leaves it facing where it began with nothing to unwind.
- */
-interface Stride {
-  /** How far round it comes over the whole walk. */
-  readonly turn: number;
-  /** The period it comes round on, and the share of that the walk takes. */
-  readonly period: number;
-  readonly share: number;
-  /** Where in the period it sets off. */
-  readonly start: number;
-  /** How many paces it takes to get round. */
-  readonly paces: number;
-  /** The share of each pace spent standing still at the end of it. */
-  readonly hold: number;
+  /**
+   * Radians per second it turns about its own axis, without stopping. Nothing
+   * in the body accounts for this, so it only suits a subject that is not
+   * standing on anything — one adrift, which turns because nothing is holding
+   * it still.
+   */
+  readonly spin?: number;
 }
 
 interface RigSpec {
@@ -123,9 +97,8 @@ interface RigSpec {
   readonly joints: readonly Joint[];
 }
 
-/** The beat the arm reaches on, and the one the humanoid shrugs on. */
+/** The beat the arm reaches on. */
 const REACH_RATE = 1.65;
-const SHRUG_PERIOD = 5.2;
 
 /**
  * The four scenes, each keeping the character of its own.
@@ -134,9 +107,8 @@ const SHRUG_PERIOD = 5.2;
  * four rotors; the balloon dog leans the way its nested groups lean and turns
  * its head after the cursor; the arm works its shoulder against its elbow so
  * the jaws travel up and down, closing on something at the bottom of each
- * reach and rolling the hand over now and then; the humanoid has been set down
- * somewhere it did not expect to be, and walks itself round on its own legs
- * working out how it got there.
+ * reach and rolling the hand over now and then; the humanoid is adrift, turning
+ * slowly on its own axis with every limb loose in the current.
  */
 const RIGS: Readonly<Record<string, RigSpec>> = {
   drone: {
@@ -180,72 +152,53 @@ const RIGS: Readonly<Record<string, RigSpec>> = {
     ],
   },
   robot: {
-    // Set down somewhere it did not expect to be. It looks about itself, cocks
-    // its head at the room, spreads its hands at the question, shifts from one
-    // foot to the other, and now and then walks itself round — an eighth of the
-    // circle at a time, standing between each step to take in what is now in
-    // front of it, until it has been the whole way round and found the same
-    // glass everywhere. Every gesture comes round on a period that divides into
-    // none of the others, so it never repeats the same beat twice running.
+    // Adrift. It hangs in the glass the way a diver hangs in water: head
+    // carried up and back, arms floated away from its sides, legs apart and
+    // loosely bent under it because nothing is standing on them. Nothing here
+    // is a gesture, and nothing comes round on a beat — every limb drifts on a
+    // slow current of its own, at a rate that divides into none of the others,
+    // so the pose never repeats and no two limbs ever arrive together.
+    //
+    // It turns about its own axis at a fifth of a degree a frame, which is slow
+    // enough that you only notice it has come round if you look away and back.
+    // A body that spins with nothing to push against is the one case where a
+    // yaw laid over the whole subject is honest rather than a turntable.
     body: {
       yaw: 0.3,
       pitch: 0.12,
       roll: 0.05,
-      bob: [0.024, 1.8],
-      sway: [0.02, 0.8],
-      stride: {
-        turn: -2 * Math.PI,
-        period: 24,
-        share: 0.6,
-        start: 5.2,
-        paces: 8,
-        hold: 0.5,
-      },
+      spin: 0.07,
+      bob: [0.06, 0.55],
+      sway: [0.03, 0.37],
     },
     joints: [
-      { part: "head", axis: "y", follow: [0.52, 0], idle: [0.12, 1.2, 0.2], episode: [-0.85, 4.0, 0.38, 0.4] },
-      { part: "head", axis: "x", follow: [0, 0.3], idle: [0.09, 1.7, 1.4] },
-      // The tilt that asks the question.
-      { part: "head", axis: "z", episode: [0.5, 3.4, 0.28, 2.6] },
-      // The arms swing against each other, and reach a little after the cursor.
-      { part: "armLeft", axis: "x", follow: [0, 0.12], idle: [0.2, 1.9, 0] },
-      { part: "armRight", axis: "x", follow: [0, 0.12], idle: [0.2, 1.9, Math.PI] },
-      { part: "forearmLeft", axis: "x", idle: [0.18, 1.9, 0] },
-      { part: "forearmRight", axis: "x", idle: [0.18, 1.9, Math.PI] },
-      // Then the shrug: both arms out at once, the forearms up after them, and
-      // the hands turned palm up at the end of it — mirrored, so the signs run
-      // opposite on the axes that are.
-      { part: "armLeft", axis: "z", episode: [-0.46, SHRUG_PERIOD, 0.42, 3.1] },
-      { part: "armRight", axis: "z", episode: [0.46, SHRUG_PERIOD, 0.42, 3.1] },
-      { part: "forearmLeft", axis: "x", episode: [0.58, SHRUG_PERIOD, 0.42, 3.3] },
-      { part: "forearmRight", axis: "x", episode: [-0.58, SHRUG_PERIOD, 0.42, 3.3] },
-      { part: "handLeft", axis: "y", episode: [1.1, SHRUG_PERIOD, 0.38, 3.6] },
-      { part: "handRight", axis: "y", episode: [-1.1, SHRUG_PERIOD, 0.38, 3.6] },
-      // While it stands, the weight goes from one foot to the other and one
-      // knee at a time gives under it. This is deliberately slighter than the
-      // knee lift of a pace, because the two can fall together, and a stand
-      // that borrows the whole lift of a step reads as a stumble.
-      { part: "legLeft", axis: "x", idle: [0.09, 0.8, 0] },
-      { part: "legRight", axis: "x", idle: [0.09, 0.8, 0] },
-      { part: "shinLeft", axis: "x", episode: [-0.19, 5.6, 0.2, 1.0] },
-      { part: "shinRight", axis: "x", episode: [0.19, 5.6, 0.2, 3.4] },
-      // And the walk itself, a pace at a time, each an eighth of the circle.
-      // The head looks where it is going and the torso follows it round, both
-      // ahead of the hips; one knee lifts and that leg swings to the new
-      // heading while the other pushes against the ground; the arms
-      // counterweight the leg opposite them. Every one of them is back where
-      // it started by the end of the step, so the stand that follows is a
-      // stand rather than a pose held awkwardly.
-      { part: "head", axis: "y", pace: [-0.34, 2] },
-      { part: "torso", axis: "y", pace: [-0.28, 2] },
-      { part: "legLeft", axis: "y", pace: [-0.32, 0] },
-      { part: "legRight", axis: "y", pace: [-0.32, 1] },
-      { part: "shinLeft", axis: "x", pace: [-0.44, 0] },
-      { part: "shinRight", axis: "x", pace: [0.44, 1] },
-      { part: "legLeft", axis: "x", pace: [0.14, 1] },
-      { part: "legRight", axis: "x", pace: [0.14, 0] },
-      { part: "armLeft", axis: "x", pace: [0.3, 1] },
-      { part: "armRight", axis: "x", pace: [0.3, 0] },
+      // The head is held up, and drifts about that.
+      { part: "head", axis: "x", rest: -0.36, follow: [0, 0.3], idle: [0.05, 0.23, 0.5] },
+      { part: "head", axis: "y", follow: [0.52, 0], idle: [0.09, 0.17, 1.9] },
+      { part: "head", axis: "z", idle: [0.05, 0.29, 3.1] },
+      // Everything above the waist turns and leans a little under it.
+      { part: "torso", axis: "y", idle: [0.06, 0.19, 0.7] },
+      { part: "torso", axis: "x", idle: [0.04, 0.13, 2.2] },
+      // Mirrored parts take opposite angles, which is what makes a pair of them
+      // symmetric — so the arms rest out to either side, and drift apart.
+      { part: "armLeft", axis: "z", rest: -0.3, idle: [0.1, 0.21, 0] },
+      { part: "armRight", axis: "z", rest: 0.3, idle: [-0.1, 0.21, 0] },
+      { part: "armLeft", axis: "x", follow: [0, 0.12], idle: [0.09, 0.27, 1.1] },
+      { part: "armRight", axis: "x", follow: [0, 0.12], idle: [-0.09, 0.25, 2.4] },
+      { part: "forearmLeft", axis: "x", idle: [0.12, 0.31, 0.4] },
+      { part: "forearmRight", axis: "x", idle: [-0.12, 0.29, 2.0] },
+      // The hands turn over at the wrist, which is the loosest joint it has and
+      // so the one that trails furthest behind the rest.
+      { part: "handLeft", axis: "y", idle: [0.2, 0.37, 1.3] },
+      { part: "handRight", axis: "y", idle: [-0.2, 0.35, 0.2] },
+      // The legs hang apart, one a little ahead of the other, and trail from
+      // the knee — which is what carries the feet, the rig having no ankle.
+      { part: "legLeft", axis: "z", rest: -0.08, idle: [0.07, 0.15, 1.4] },
+      { part: "legRight", axis: "z", rest: 0.08, idle: [-0.07, 0.16, 0.6] },
+      { part: "legLeft", axis: "x", rest: 0.1, idle: [0.12, 0.22, 0.3] },
+      { part: "legRight", axis: "x", rest: 0.1, idle: [0.12, 0.2, 2.6] },
+      { part: "shinLeft", axis: "x", rest: -0.14, idle: [0.15, 0.26, 1.7] },
+      { part: "shinRight", axis: "x", rest: 0.14, idle: [-0.15, 0.24, 0.5] },
     ],
   },
 };
@@ -275,12 +228,20 @@ export interface Rig {
 
 /**
  * How finely the fit is sampled: the cursor on a 5x5 grid of its range, and the
- * clock at a step that is no neat fraction of a spin or an idle sway, walked
- * far enough to catch the slowest gesture in the rig at least once.
+ * clock walked far enough to see the slowest thing the rig does come round.
+ *
+ * `CLOCK_STEP` is the finest the clock is ever walked and no neat fraction of
+ * any period in play, so a fast spin and a slow sway are both stepped through
+ * rather than caught at one phase apiece. It also sets the shortest sweep, at
+ * `CLOCK_SAMPLES_MIN` of it. A rig with a minute-long drift in it opens the
+ * step up instead of running past `CLOCK_SAMPLES_MAX`, which keeps the whole
+ * fit — every part's corners, in every pose, against every cursor — inside a
+ * frame's worth of work.
  */
 const POINTER_SAMPLES = 2;
-const CLOCK_SAMPLES = 24;
 const CLOCK_STEP = 0.19;
+const CLOCK_SAMPLES_MIN = 24;
+const CLOCK_SAMPLES_MAX = 160;
 
 /** A point the fit maths writes into, as against a `Vec3` it reads. */
 type Point = [number, number, number];
@@ -301,28 +262,38 @@ export function rigFor(id: string, reduceMotion: boolean): Rig | undefined {
     !reduceMotion &&
     (spec.body.bob !== undefined ||
       spec.body.sway !== undefined ||
-      spec.body.stride !== undefined ||
+      spec.body.spin !== undefined ||
       joints.some(
         ({ joint }) =>
           joint.spin !== undefined ||
           joint.idle !== undefined ||
-          joint.episode !== undefined ||
-          joint.pace !== undefined
+          joint.episode !== undefined
       ));
 
-  // A gesture whose period outruns the sweep is invisible to it, and the fit
-  // would then be solved for poses the rig does not hold while holding one it
-  // does. Walk far enough to see the slowest of them.
+  // Anything whose period outruns the sweep is invisible to it, and the fit
+  // would then be solved over a sliver of the rig's motion while it spends the
+  // rest of its time in poses nothing measured. So the sweep is stretched to
+  // the slowest thing in the rig — a gesture states its period outright, and
+  // anything turning at a rate comes round in a full turn of it — and the step
+  // is opened up to match rather than adding samples without end, since a
+  // motion that takes a minute needs no finer walking than one that takes four
+  // seconds.
   const span = Math.max(
-    CLOCK_SAMPLES * CLOCK_STEP,
-    spec.body.stride?.period ?? 0,
-    ...joints.map(({ joint }) => joint.episode?.[1] ?? 0)
+    CLOCK_SAMPLES_MIN * CLOCK_STEP,
+    ...joints.map(({ joint }) => joint.episode?.[1] ?? 0),
+    ...[
+      spec.body.spin,
+      spec.body.bob?.[1],
+      spec.body.sway?.[1],
+      ...joints.map(({ joint }) => joint.idle?.[1]),
+    ].map((rate) => (rate ? (2 * Math.PI) / Math.abs(rate) : 0))
   );
-  const clockSamples = Math.ceil(span / CLOCK_STEP);
+  const clockSamples = Math.min(CLOCK_SAMPLES_MAX, Math.ceil(span / CLOCK_STEP));
+  const clockStep = span / clockSamples;
 
   const rig: Rig = {
     animated,
-    fitScale: (centre) => poseFitScale(parts, rig.pose, centre, clockSamples),
+    fitScale: (centre) => poseFitScale(parts, rig.pose, centre, clockSamples, clockStep),
     pose(pointer, time, settle) {
       const amount = 1 - settle;
       const local: Float32Array[] = parts.map(() => IDENTITY_4);
@@ -330,7 +301,7 @@ export function rigFor(id: string, reduceMotion: boolean): Rig | undefined {
         const part = parts[index]!;
         const turn = rotationAbout(
           axisOf(part, joint.axis),
-          jointAngle(joint, spec.body.stride, pointer, time, reduceMotion) * amount,
+          jointAngle(joint, pointer, time, reduceMotion) * amount,
           part.pivot as unknown as Vec3
         );
         // A joint that already carries a turn — the head's yaw and its pitch —
@@ -352,10 +323,7 @@ export function rigFor(id: string, reduceMotion: boolean): Rig | undefined {
       const sway = spec.body.sway;
       return {
         parts: posed.slice(0, PART_SLOTS),
-        yaw:
-          (-pointer[0] * spec.body.yaw +
-            (spec.body.stride && !reduceMotion ? strideYaw(spec.body.stride, time) : 0)) *
-          amount,
+        yaw: (-pointer[0] * spec.body.yaw + (spec.body.spin ?? 0) * clock) * amount,
         pitch: -pointer[1] * spec.body.pitch * amount,
         roll: pointer[0] * spec.body.roll * amount,
         drift: [
@@ -375,7 +343,6 @@ function axisOf(part: RigPart, axis: "x" | "y" | "z"): Vec3 {
 
 function jointAngle(
   joint: Joint,
-  stride: Stride | undefined,
   pointer: Vec2,
   time: number,
   reduceMotion: boolean
@@ -383,64 +350,12 @@ function jointAngle(
   const follow = joint.follow
     ? -pointer[0] * joint.follow[0] - pointer[1] * joint.follow[1]
     : 0;
-  if (reduceMotion) return follow;
+  const held = joint.rest ?? 0;
+  if (reduceMotion) return held + follow;
   const spin = joint.spin ? joint.spin * time : 0;
   const idle = joint.idle ? Math.sin(time * joint.idle[1] + joint.idle[2]) * joint.idle[0] : 0;
   const gesture = joint.episode ? episodeAngle(joint.episode, time) : 0;
-  const walk = joint.pace && stride ? paceAngle(joint.pace, stride, time) : 0;
-  return follow + spin + idle + gesture + walk;
-}
-
-/**
- * Which pace of a stride the clock is on and how far through it, or nothing at
- * all between one walk and the next.
- */
-function stridePace(stride: Stride, time: number): readonly [number, number] | undefined {
-  const window = stride.period * stride.share;
-  const phase = (((time - stride.start) % stride.period) + stride.period) % stride.period;
-  if (phase >= window) return undefined;
-  const walked = (phase / window) * stride.paces;
-  const index = Math.min(stride.paces - 1, Math.floor(walked));
-  // A pace is a step and then a stand. Running the step out over the share of
-  // the pace that is not the hold, and pinning it at its end through the rest,
-  // leaves every joint exactly where the step put it while the subject stands.
-  return [index, Math.min(1, (walked - index) / (1 - stride.hold))];
-}
-
-/**
- * How far round the subject has come: the paces behind it whole, and the one it
- * is in the middle of eased from end to end. The turn therefore moves while a
- * foot is in the air and stands still as it lands, which is the whole
- * difference between walking round and being turned round.
- */
-function strideYaw(stride: Stride, time: number): number {
-  const pace = stridePace(stride, time);
-  if (!pace) return 0;
-  const [index, through] = pace;
-  return (stride.turn * (index + 0.5 * (1 - Math.cos(Math.PI * through)))) / stride.paces;
-}
-
-/**
- * A joint's part in the pace it is taken on: at rest at either end of it and
- * fully committed in the middle, so every limb is back under the body by the
- * time the foot lands and the next pace begins.
- *
- * The bump is a raised cosine rather than a half sine, which matters more than
- * it sounds. A half sine is at rest at both ends but is still travelling when
- * it gets there, so every limb arrives at the end of its pace at full speed and
- * stops dead — a step that lands like a dropped tool. This leaves and returns
- * with no speed at all.
- */
-function paceAngle(
-  [angle, on]: readonly [number, number],
-  stride: Stride,
-  time: number
-): number {
-  const pace = stridePace(stride, time);
-  if (!pace) return 0;
-  const [index, through] = pace;
-  if (on < 2 && index % 2 !== on) return 0;
-  return angle * 0.5 * (1 - Math.cos(2 * Math.PI * through));
+  return held + follow + spin + idle + gesture;
 }
 
 /**
@@ -475,26 +390,24 @@ function episodeAngle(
  * never came near a face.
  *
  * The samples cover the corners, edges and centre of the cursor's range, and
- * enough of the clock for a propeller to come round, for the slowest sway to
- * reach both of its ends, and for every pace of the longest walk to have been
- * taken. That is a few hundred thousand corners for a rig with a dozen parts
- * and a walk to get through, so they are handed to the fit one at a time as
- * they are worked out rather than gathered into a list first: all it keeps of
- * them is how far the furthest reached toward each of the four faces.
+ * enough of the clock for a propeller to come round, for the slowest drift to
+ * reach both of its ends, and for a subject turning on its own axis to have
+ * come the whole way round. That is a few hundred thousand corners for a rig
+ * with a dozen parts, so they are handed to the fit one at a time as they are
+ * worked out rather than gathered into a list first: all it keeps of them is
+ * how far the furthest reached toward each of the four faces.
  */
 function poseFitScale(
   parts: readonly RigPart[],
   pose: (pointer: Vec2, time: number, settle: number) => RigPose,
   centre: Vec3,
-  clockSamples: number
+  clockSamples: number,
+  clockStep: number
 ): number {
   const boxes = parts.map((part) => corners(part.min as Point, part.max as Point));
   return pyramidInteriorScaleReached((reach) => {
     for (let step = 0; step <= clockSamples; step++) {
-      // A step that is no neat fraction of any of the periods in play, so the
-      // fast spin and the slow sway are both walked through rather than caught
-      // at one phase apiece.
-      const time = step * CLOCK_STEP;
+      const time = step * clockStep;
       for (let x = -POINTER_SAMPLES; x <= POINTER_SAMPLES; x++)
         for (let y = -POINTER_SAMPLES; y <= POINTER_SAMPLES; y++) {
           const posed = pose([x / POINTER_SAMPLES, y / POINTER_SAMPLES], time, 0);

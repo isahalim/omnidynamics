@@ -117,9 +117,9 @@ const MODELS = [
     radius: 1.02,
     yaw: 0,
     // `Top part` is everything above the waist, so it is the joint the humanoid
-    // twists on; each arm below it runs shoulder > forearm > hand, and each leg
-    // under it femur > shin, so it can turn the way a body turns rather than
-    // the way a turntable does. `Hand Instance`
+    // turns and leans on; each arm below it runs shoulder > forearm > hand, and
+    // each leg under it femur > shin, so every limb can move on its own rather
+    // than the whole figure moving as one piece. `Hand Instance`
     // is the mirrored left arm and `Hand` the right, as `Leg Left Instance` and
     // `Leg Left` are its legs; each is qualified by its parent, because the mesh
     // at the end of every forearm is also called "Hand".
