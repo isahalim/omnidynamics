@@ -12,11 +12,12 @@
  *   indices     : uint16
  *
  * The rig is why `packed_normal.w` is no longer dead. Each Spline scene moves
- * its subject in parts — the drone's four rotors turn, the arm's base and two
- * joints swing, the humanoid's head and arms follow — and a single baked mesh
- * cannot express that. So the joints those scenes are built around are read out
- * of the GLB by name, every vertex is stamped with the part it belongs to, and
- * the parts table is written beside the mesh for the page to pose at runtime.
+ * its subject in parts — the drone's four rotors turn, the arm swings from its
+ * base down to the jaws, the humanoid moves head, arms, hands and legs — and a
+ * single baked mesh cannot express that. So the joints those scenes are built
+ * around are read out of the GLB by name, every vertex is stamped with the part
+ * it belongs to, and the parts table is written beside the mesh for the page to
+ * pose at runtime.
  * See `src/lib/prism/rig.ts`.
  */
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
@@ -63,7 +64,7 @@ const AO_MAX_STEPS = 26;
  * `PART_SCALE` in `hero-fractal-mesh.wgsl`.
  */
 const PART_SCALE = 64;
-const MAX_PARTS = 8; // PART_SLOTS in hero-fractal-mesh.wgsl
+const MAX_PARTS = 12; // PART_SLOTS in hero-fractal-mesh.wgsl
 
 // Each Spline export also ships its presentation wordmark, a floor plane and a
 // camera target. Those dominate the bounding box, so keep only the subject.
@@ -97,11 +98,16 @@ const MODELS = [
     keep: ["Base Y Rotation", "Base"],
     radius: 1.0,
     yaw: -0.5,
-    // The arm's own three axes, named by the scene that drives them.
+    // The arm's own axes, named by the scene that drives them, down to the
+    // wrist and the two jaws inside `Grab` that close on what it picks up.
     joints: [
       { node: "Base Y Rotation", as: "base" },
       { node: "1 Hand X rotation", as: "shoulder" },
       { node: "2 Hand X Rotation", as: "elbow" },
+      { node: "3 Hand X Rotate", as: "wrist" },
+      { node: "Grab", as: "grip" },
+      { node: "Grab/1", as: "jawLeft" },
+      { node: "Grab/2", as: "jawRight" },
     ],
   },
   {
@@ -110,13 +116,23 @@ const MODELS = [
     keep: ["Bot"],
     radius: 1.02,
     yaw: 0,
-    // `Hand Instance` is the mirrored left arm; `Hand` is the right. Both are
-    // qualified by their parent, because the mesh at the end of each forearm is
-    // also called "Hand".
+    // Each arm runs shoulder > forearm > hand and each leg femur > shin, so the
+    // humanoid moves every limb rather than only its shoulders. `Hand Instance`
+    // is the mirrored left arm and `Hand` the right, as `Leg Left Instance` and
+    // `Leg Left` are its legs; each is qualified by its parent, because the mesh
+    // at the end of every forearm is also called "Hand".
     joints: [
       { node: "Top part/Head", as: "head" },
       { node: "Top part/Hand Instance", as: "armLeft" },
       { node: "Top part/Hand", as: "armRight" },
+      { node: "Hand Instance/Hand LEFT/arm/elbow/forearm", as: "forearmLeft" },
+      { node: "Hand/Hand LEFT/arm/elbow/forearm", as: "forearmRight" },
+      { node: "Hand Instance/Hand LEFT/arm/elbow/forearm/Hand", as: "handLeft" },
+      { node: "Hand/Hand LEFT/arm/elbow/forearm/Hand", as: "handRight" },
+      { node: "Leg Left Instance/femur", as: "legLeft" },
+      { node: "Leg Left/femur", as: "legRight" },
+      { node: "Leg Left Instance/femur/shin", as: "shinLeft" },
+      { node: "Leg Left/femur/shin", as: "shinRight" },
     ],
   },
 ];
