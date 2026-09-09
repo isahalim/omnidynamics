@@ -1,4 +1,6 @@
 ---
+import { ICON_VERSION } from "../pages/site.webmanifest";
+
 interface Props {
   title: string;
   description?: string;
@@ -30,14 +32,28 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
     {/*
       The mark, everywhere something asks for one. The SVG is the tab icon and
       the only copy that follows the browser's chrome from black to white; the
-      PNGs are the black mark on the site's own plaster, because a home screen
-      composites a transparent icon on black. Without `apple-touch-icon` iOS
-      draws its own tile — a grey square with the first letter of the title —
-      which is what "Add to Home Screen" was producing.
+      PNGs are the white mark on nothing, since every place they land — the tab
+      strip, and iOS, which composites a transparent home-screen icon onto
+      black — is dark. Without `apple-touch-icon` iOS draws its own tile — a
+      grey square with the first letter of the title — which is what "Add to
+      Home Screen" was producing.
+
+      Each address carries `?v=`: Safari files favicons by URL and will not go
+      back for a new one at an address it already has, so a mark that changes
+      under a fixed name is a mark Safari goes on drawing the old version of.
     */}
-    <link rel="icon" href={`${base}/favicon.svg`} type="image/svg+xml" />
-    <link rel="icon" href={`${base}/favicon-96.png`} type="image/png" sizes="96x96" />
-    <link rel="apple-touch-icon" href={`${base}/apple-touch-icon.png`} sizes="180x180" />
+    <link rel="icon" href={`${base}/favicon.svg?v=${ICON_VERSION}`} type="image/svg+xml" />
+    <link
+      rel="icon"
+      href={`${base}/favicon-96.png?v=${ICON_VERSION}`}
+      type="image/png"
+      sizes="96x96"
+    />
+    <link
+      rel="apple-touch-icon"
+      href={`${base}/apple-touch-icon.png?v=${ICON_VERSION}`}
+      sizes="180x180"
+    />
     <link rel="manifest" href={`${base}/site.webmanifest`} />
     <meta name="apple-mobile-web-app-title" content="OmniDynamics" />
     <meta name="apple-mobile-web-app-capable" content="yes" />

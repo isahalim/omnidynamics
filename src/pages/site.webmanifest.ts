@@ -12,6 +12,15 @@ import { withBase } from "../lib/base";
 
 const ICON = { sizes: "512x512", type: "image/png" } as const;
 
+/**
+ * Bumped whenever the mark itself changes. Safari keeps its favicons in a
+ * database keyed on the icon's URL and will not go back for a new one at an
+ * address it already holds, so the address has to be the thing that moves.
+ * `src/layouts/Base.astro` stamps the same version on the `<link>`s.
+ */
+export const ICON_VERSION = "2";
+const v = `?v=${ICON_VERSION}`;
+
 export const GET: APIRoute = () =>
   new Response(
     JSON.stringify(
@@ -27,9 +36,9 @@ export const GET: APIRoute = () =>
         background_color: "#d2ccc2",
         theme_color: "#d2ccc2",
         icons: [
-          { src: withBase("/icon-192.png"), sizes: "192x192", type: "image/png" },
-          { src: withBase("/icon-512.png"), ...ICON },
-          { src: withBase("/icon-512.png"), ...ICON, purpose: "maskable" },
+          { src: withBase(`/icon-192.png${v}`), sizes: "192x192", type: "image/png" },
+          { src: withBase(`/icon-512.png${v}`), ...ICON },
+          { src: withBase(`/icon-maskable-512.png${v}`), ...ICON, purpose: "maskable" },
         ],
       },
       null,

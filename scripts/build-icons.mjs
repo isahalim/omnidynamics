@@ -14,15 +14,17 @@
  * beyond node — the two strokes are a circle and a segment, and the distance to
  * each is exact.
  *
- * The home-screen tiles are opaque. A transparent icon is composited on black by
- * iOS, which would put a black mark on a black ground.
+ * Every tile is the mark in white on nothing, the way `favicon.svg` draws it on
+ * dark chrome. A PNG cannot follow the chrome from light to dark the way the
+ * SVG's `currentColor` does, and white on transparent is what each of the
+ * places these land is dark enough to want: the tab strip, and iOS, which
+ * composites a transparent home-screen icon onto black.
  *
- * The tab icon is the exception: it is the mark in white on a transparent
- * ground, so that it sits on the browser's own chrome the way `favicon.svg`
- * does rather than punching a plaster-coloured tile into it. White because
- * a PNG cannot follow the chrome from light to dark the way the SVG's
- * `currentColor` does, and the SVG is what a browser reaches for first — this
- * is the fallback, and it is the dark chrome it has to fall back onto.
+ * Android is the exception, and the reason for the maskable tile. It sets a
+ * non-maskable icon on a light plate of its own, where a white mark would
+ * vanish, so the maskable copy carries its own ink ground — full bleed, with
+ * the mark kept well inside the launcher's safe zone since the corners are cut
+ * to whatever shape the device likes.
  */
 import { writeFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
@@ -33,13 +35,14 @@ const STEM_X = 28.4;
 const STEM_HALF = Math.sqrt(RADIUS ** 2 - (50 - STEM_X) ** 2);
 const STROKE = 9.5;
 
-/** The lit plaster the site is on, and the ink the mark is drawn in. */
-const GROUND = [0xd2, 0xcc, 0xc2];
-const INK = [0x0d, 0x0d, 0x0f];
-/** The tab icon's ink, matching the white `favicon.svg` takes on dark chrome. */
-const CHROME_INK = [0xf4, 0xf4, 0xf6];
-/** How much of the tile the mark takes, leaving iOS its rounding margin. */
+/** The ink the mark is drawn in, matching the white `favicon.svg` takes on dark
+ * chrome, and the ground the one opaque tile is drawn on. */
+const INK = [0xf4, 0xf4, 0xf6];
+const GROUND = [0x0d, 0x0d, 0x0f];
+/** How much of the tile the mark takes, leaving iOS its rounding margin, and
+ * how much of the maskable one, leaving the launcher its safe zone. */
 const COVERAGE = 0.62;
+const MASKABLE_COVERAGE = 0.44;
 /** Samples per axis. The mark is two thin strokes; edges have to be clean. */
 const SUPERSAMPLE = 4;
 
@@ -53,15 +56,14 @@ const ICONS = [
   { file: "apple-touch-icon.png", size: 180 },
   { file: "icon-192.png", size: 192 },
   { file: "icon-512.png", size: 512 },
-  { file: "favicon-96.png", size: 96, ink: CHROME_INK, transparent: true },
+  { file: "favicon-96.png", size: 96 },
+  { file: "icon-maskable-512.png", size: 512, ground: GROUND, coverage: MASKABLE_COVERAGE },
 ];
 
 for (const icon of ICONS) {
-  const { size, ink = INK, transparent = false } = icon;
-  writeFileSync(`public/${icon.file}`, png(render(size, ink, transparent), size, transparent));
-  console.log(
-    `public/${icon.file}  ${size}x${size}  ${transparent ? "transparent" : "on plaster"}`
-  );
+  const { size, ground = null, coverage = COVERAGE } = icon;
+  writeFileSync(`public/${icon.file}`, png(render(size, ground, coverage), size, !ground));
+  console.log(`public/${icon.file}  ${size}x${size}  ${ground ? "on ink" : "transparent"}`);
 }
 
 /** Distance from a point to the mark, in the 100x100 box, negative inside. */
@@ -73,18 +75,18 @@ function markDistance(x, y) {
 }
 
 /**
- * A tile with the mark centred on it, in `ink`.
+ * A tile with the mark centred on it.
  *
- * Opaque, the mark is composited onto the plaster. Transparent, the ground is
+ * Given a `ground` the mark is composited onto it. Without one the ground is
  * left empty and the coverage becomes the alpha instead — the ink is written
  * flat across the whole tile so that the antialiased edge fades out in alpha
  * rather than towards a background colour, which is what would otherwise leave
- * a plaster-coloured fringe once the browser drew it on its own dark chrome.
+ * a fringe once the browser drew it on its own chrome.
  */
-function render(size, ink = INK, transparent = false) {
-  const channels = transparent ? 4 : 3;
+function render(size, ground = null, tileCoverage = COVERAGE) {
+  const channels = ground ? 3 : 4;
   const pixels = new Uint8Array(size * size * channels);
-  const scale = 100 / (size * COVERAGE);
+  const scale = 100 / (size * tileCoverage);
   const origin = 50 - (size / 2) * scale;
   const step = scale / SUPERSAMPLE;
   for (let py = 0; py < size; py++)
@@ -98,14 +100,14 @@ function render(size, ink = INK, transparent = false) {
         }
       const coverage = inside / (SUPERSAMPLE * SUPERSAMPLE);
       const offset = (py * size + px) * channels;
-      if (transparent) {
-        for (let channel = 0; channel < 3; channel++) pixels[offset + channel] = ink[channel];
-        pixels[offset + 3] = Math.round(255 * coverage);
-      } else {
+      if (ground) {
         for (let channel = 0; channel < 3; channel++)
           pixels[offset + channel] = Math.round(
-            GROUND[channel] * (1 - coverage) + ink[channel] * coverage
+            ground[channel] * (1 - coverage) + INK[channel] * coverage
           );
+      } else {
+        for (let channel = 0; channel < 3; channel++) pixels[offset + channel] = INK[channel];
+        pixels[offset + 3] = Math.round(255 * coverage);
       }
     }
   return pixels;

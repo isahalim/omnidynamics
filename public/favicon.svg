@@ -1,12 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
   <!-- The monogram as the header wears it: a ring with a stem a third of the
-       way across, the ring's own right side standing in for the D's bowl. Black
-       on the browser's light chrome, white on its dark. -->
-  <style>
-    :root { color: #0d0d0f; }
-    @media (prefers-color-scheme: dark) { :root { color: #f4f4f6; } }
-  </style>
-  <g fill="none" stroke="currentColor" stroke-width="9.5" stroke-linecap="round">
+       way across, the ring's own right side standing in for the D's bowl.
+
+       White on nothing, flatly, rather than following the chrome from black to
+       white: Safari does not resolve `prefers-color-scheme` inside a favicon,
+       so the adaptive copy came out as its light-mode branch — a black mark on
+       Safari's dark tab strip. White is the one ink that reads on every strip
+       that actually shows this, and it is what the PNG fallbacks are drawn in
+       too. See `scripts/build-icons.mjs`. -->
+  <g fill="none" stroke="#f4f4f6" stroke-width="9.5" stroke-linecap="round">
     <circle cx="50" cy="50" r="45"/>
     <line x1="28.4" y1="10.52" x2="28.4" y2="89.48"/>
   </g>
