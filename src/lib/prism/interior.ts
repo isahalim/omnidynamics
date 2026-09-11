@@ -194,16 +194,28 @@ export async function createPrismInterior(
       await orbDraw.compile(target);
     }
     const rig = isFractal ? undefined : rigFor(id, reduceMotion);
+    // The fractal fills the solid from its centre; a model is centred on its
+    // own bounds and stands where the orb does.
+    //
+    // The tesseract is the exception, and stands at the solid's own middle. It
+    // is the one shape in the glass that is inscribed rather than placed — its
+    // nine shells reach out to a sphere, and the fit below has that sphere very
+    // nearly touching all four faces — so where it stands is not a matter of
+    // composition but of how large it can be. The middle of a tetrahedron is
+    // the one point the same distance from every face, and carrying it the
+    // 0.08 up to where the orb sits costs it a tenth of its size.
+    const offset: Vec3 =
+      isFractal || id === "chronovoxel"
+        ? [0, 0, 0]
+        : [0, HERO_FRACTAL_GLASS.orbOffsetY, 0];
     entries.set(id, {
       draw: interiorDraw,
       meshMin: mesh.meshMin,
       meshMax: mesh.meshMax,
       scale: isFractal
         ? HERO_FRACTAL_GLASS.fractalScale
-        : fitScale(mesh.meshMin, mesh.meshMax, rig),
-      // The fractal fills the solid from its centre; a model is centred on its
-      // own bounds and stands where the orb does.
-      offset: isFractal ? [0, 0, 0] : [0, HERO_FRACTAL_GLASS.orbOffsetY, 0],
+        : fitScale(mesh.meshMin, mesh.meshMax, offset, rig),
+      offset,
       spins: !isFractal,
       rig,
       wholeMesh: isFractal ? 0 : 1,
@@ -535,9 +547,9 @@ export async function createPrismInterior(
 function fitScale(
   meshMin: readonly [number, number, number],
   meshMax: readonly [number, number, number],
+  centre: Vec3,
   rig?: Rig
 ): number {
-  const centre: Vec3 = [0, HERO_FRACTAL_GLASS.orbOffsetY, 0];
   if (rig) return rig.fitScale(centre);
   return pyramidInteriorScale(
     [

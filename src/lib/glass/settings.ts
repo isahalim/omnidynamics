@@ -29,9 +29,9 @@ export interface HeroGlowMaterial {
  *
  * `centre` and `bloom` are the two numbers the glow is drawn with, and they are
  * in the range the image is already in rather than in light: the glow is added
- * over the scene, so `centre` is how much a line of sight straight through the
- * middle of it lays on, and `bloom` the same for the wide soft falloff around
- * it.
+ * over the scene, so `centre` is how much the middle of it lays on and `bloom`
+ * the same for the corona around it. `centre` is deliberately past 1, where it
+ * clips to white — see `hero-fractal-core.wgsl`.
  */
 export interface HeroCoreLight {
   readonly radius: number;
@@ -136,8 +136,11 @@ export const HERO_GLOW_MATERIAL = {
 export const HERO_CORE_LIGHT = {
   // Small. A body of light wide enough to stand behind the shells lays itself
   // over every one of them, which is the flat emissive answer again by another
-  // route: what has to reach them is the light, not the lamp.
-  radius: 0.22,
+  // route: what has to reach them is the light, not the lamp. The corona wants
+  // a little room to fall away in, though, and the core inside it is held to a
+  // third of this, so the part that is actually bright is smaller than the
+  // number looks.
+  radius: 0.52,
   // Short, inside the body. The light has to stay a local thing there — bright
   // in the crevice it is standing in and worth almost nothing by the outer
   // shell — or every surface takes the same amount of it and the tesseract
@@ -158,11 +161,12 @@ export const HERO_CORE_LIGHT = {
   // the shape included — so a share written as though the glass were a wall
   // washes out the tesseract itself and undoes the work above.
   glassReach: 0.12,
-  // And the ball of light itself is kept low, because what it adds it adds over
-  // the far side of the body as well as over the gaps. Most of what should be
-  // seen of the lamp is the light it puts on the ceramic, not the lamp.
-  centre: 0.3,
-  bloom: 0.025,
+  // The core goes well past white, so the middle of it clips and reads as
+  // something too bright to look at. The corona around it stays low, because
+  // what it adds it adds over the far side of the body as well as over the
+  // gaps, and the body is meant to stay dark.
+  centre: 2.6,
+  bloom: 0.2,
   pulse: [0.1, 0.62],
   escape: [0.2, 0.88],
 } satisfies HeroCoreLight;

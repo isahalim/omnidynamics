@@ -44,11 +44,11 @@ export const PRISM_STATES: readonly PrismStateInfo[] = [
     label: "ChronoVoxel",
     href: null,
     blurb:
-      "A model-agnostic tool that turns a physical AI agent's fleeting, " +
-      "frame-by-frame attention into one persistent, queryable 4D record — " +
-      "accumulating, comparing, and replaying why multimodal VLM/LLM systems " +
-      "chose what they chose, from raw pixels to a certifiable heat field in " +
-      "the world.",
+      "A model-agnostic tool and evaluation harness that turns a physical AI " +
+      "agent's fleeting, frame-by-frame attention into one persistent, " +
+      "queryable 4D record — accumulating, comparing, and replaying why " +
+      "multimodal VLM/LLM systems chose what they chose, from raw pixels to a " +
+      "certifiable heat field in the world.",
     hint: "Coming soon",
   },
   {
