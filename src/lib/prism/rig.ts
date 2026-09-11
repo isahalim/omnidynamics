@@ -13,6 +13,11 @@
  * joint's pivot, its own axes, and how far its part reaches. This is the other
  * half: what angle each joint stands at, frame by frame.
  *
+ * One subject states its own motion instead. The tesseract's nine shells each
+ * turn and breathe on a curve nothing written here would be, so that curve is
+ * read out of the GLB with the joints and played back from `model-clips.json`;
+ * everything below still applies over the top of it.
+ *
  * The one thing the scenes do not have to worry about, and this does, is the
  * glass. A model is fitted to the tetrahedron by its bounding box, so a part
  * that swings outside that box would push through a face. `sweptHalfExtents`
@@ -21,11 +26,20 @@
  * the shape stays inside the pyramid in every pose it can hold rather than only
  * in the one it was baked in.
  */
+import modelClips from "../glass/model-clips.json";
 import rigTables from "../glass/model-rigs.json";
 
-import { IDENTITY_4, multiply4, rotationAbout, spinModelMatrix } from "./matrix";
+import {
+  IDENTITY_4,
+  IDENTITY_QUATERNION,
+  multiply4,
+  rotationAbout,
+  similarityAbout,
+  slerp,
+  spinModelMatrix,
+} from "./matrix";
 import { pyramidInteriorScaleReached } from "./pyramid";
-import type { Vec2, Vec3 } from "./constants";
+import type { Quaternion, Vec2, Vec3 } from "./constants";
 
 /** Must match `PART_SLOTS` in `../glass/hero-fractal-mesh.wgsl`. */
 export const PART_SLOTS = 16;
@@ -94,7 +108,31 @@ interface Body {
 
 interface RigSpec {
   readonly body: Body;
+  /**
+   * The scene's own animation, for a subject that arrived with one. Every
+   * joint it names is posed from the curve; the joints below still pose on top
+   * of it, which is how a clip and a cursor can both have their say.
+   */
+  readonly clip?: string;
   readonly joints: readonly Joint[];
+}
+
+/**
+ * One joint's baked curve, as `scripts/build-meshes.mjs` thins it: the key
+ * times, the turn at each as a quaternion, and the uniform scale beside it.
+ * Flat arrays rather than a list of keys, because this ships in the page's own
+ * bundle and a key is five numbers and no structure.
+ */
+interface ClipTrack {
+  readonly t: readonly number[];
+  readonly q: readonly number[];
+  readonly s: readonly number[];
+}
+
+interface Clip {
+  /** Seconds. The curve returns to where it started, so it simply repeats. */
+  readonly duration: number;
+  readonly parts: Readonly<Record<string, ClipTrack>>;
 }
 
 /** The beat the arm reaches on. */
@@ -104,10 +142,10 @@ const REACH_RATE = 1.65;
  * The four scenes, each keeping the character of its own.
  *
  * The drone banks into the cursor as its `Follow` group does, hovering on its
- * four rotors; the balloon dog leans the way its nested groups lean and turns
- * its head after the cursor; the arm works its shoulder against its elbow so
- * the jaws travel up and down, closing on something at the bottom of each
- * reach and rolling the hand over now and then; the humanoid is adrift, turning
+ * four rotors; the tesseract plays the turn and breath its own scene authored,
+ * adrift under the cursor; the arm works its shoulder against its elbow so the
+ * jaws travel up and down, closing on something at the bottom of each reach and
+ * rolling the hand over now and then; the humanoid is adrift too, turning
  * slowly on its own axis with every limb loose in the current.
  */
 const RIGS: Readonly<Record<string, RigSpec>> = {
@@ -121,12 +159,19 @@ const RIGS: Readonly<Record<string, RigSpec>> = {
       { part: "rotor.3", axis: "y", spin: 26 },
     ],
   },
-  quadruped: {
-    body: { yaw: 0.44, pitch: 0.2, roll: 0.16, bob: [0.022, 1.25], sway: [0.012, 0.85] },
-    joints: [
-      { part: "head", axis: "y", follow: [0.34, 0], idle: [0.05, 0.9, 0.4] },
-      { part: "head", axis: "x", follow: [0, 0.26], idle: [0.04, 1.7, 1.1] },
-    ],
+  chronovoxel: {
+    // Nine shells folding through one another is all the motion the shape
+    // needs, so nothing is laid over it but the drift of a thing with nothing
+    // holding it still, and the lean it takes toward the cursor.
+    body: {
+      yaw: 0.4,
+      pitch: 0.16,
+      roll: 0.08,
+      bob: [0.035, 0.5],
+      sway: [0.018, 0.33],
+    },
+    clip: "chronovoxel",
+    joints: [],
   },
   manipulator: {
     // The pedestal is bolted to the floor: the arm does the moving, and the
@@ -258,9 +303,23 @@ export function rigFor(id: string, reduceMotion: boolean): Rig | undefined {
     .map((joint) => ({ joint, index: parts.findIndex((part) => part.name === joint.part) }))
     .filter((entry) => entry.index > 0);
 
+  const clip = spec.clip
+    ? (modelClips as Record<string, Clip>)[spec.clip]
+    : undefined;
+  // The same, for the clip: only the parts it drives that the mesh still has.
+  const played = clip
+    ? Object.entries(clip.parts)
+        .map(([name, track]) => ({
+          track,
+          index: parts.findIndex((part) => part.name === name),
+        }))
+        .filter((entry) => entry.index > 0)
+    : [];
+
   const animated =
     !reduceMotion &&
-    (spec.body.bob !== undefined ||
+    (played.length > 0 ||
+      spec.body.bob !== undefined ||
       spec.body.sway !== undefined ||
       spec.body.spin !== undefined ||
       joints.some(
@@ -280,6 +339,7 @@ export function rigFor(id: string, reduceMotion: boolean): Rig | undefined {
   // seconds.
   const span = Math.max(
     CLOCK_SAMPLES_MIN * CLOCK_STEP,
+    clip?.duration ?? 0,
     ...joints.map(({ joint }) => joint.episode?.[1] ?? 0),
     ...[
       spec.body.spin,
@@ -297,6 +357,20 @@ export function rigFor(id: string, reduceMotion: boolean): Rig | undefined {
     pose(pointer, time, settle) {
       const amount = 1 - settle;
       const local: Float32Array[] = parts.map(() => IDENTITY_4);
+      // The scene's own curve first, so a joint written below still has the
+      // last word over the part it shares with it. Both are faded out by the
+      // morph, which is what leaves every shape the same sphere at the orb.
+      if (clip) {
+        const phase = reduceMotion ? 0 : ((time % clip.duration) + clip.duration) % clip.duration;
+        for (const { track, index } of played) {
+          const key = keyAt(track, phase);
+          local[index] = similarityAbout(
+            slerp(IDENTITY_QUATERNION, key.turn, amount),
+            1 + (key.scale - 1) * amount,
+            parts[index]!.pivot as unknown as Vec3
+          );
+        }
+      }
       for (const { joint, index } of joints) {
         const part = parts[index]!;
         const turn = rotationAbout(
@@ -304,8 +378,8 @@ export function rigFor(id: string, reduceMotion: boolean): Rig | undefined {
           jointAngle(joint, pointer, time, reduceMotion) * amount,
           part.pivot as unknown as Vec3
         );
-        // A joint that already carries a turn — the head's yaw and its pitch —
-        // takes the second on top of the first.
+        // A joint that already carries a turn — the head's yaw and its pitch,
+        // or a clip's key under either — takes the second on top of the first.
         local[index] = local[index] === IDENTITY_4 ? turn : multiply4(local[index]!, turn);
       }
 
@@ -339,6 +413,38 @@ export function rigFor(id: string, reduceMotion: boolean): Rig | undefined {
 
 function axisOf(part: RigPart, axis: "x" | "y" | "z"): Vec3 {
   return part.axes[axis] as unknown as Vec3;
+}
+
+/**
+ * Where a baked curve stands at this moment: the turn and the uniform scale,
+ * interpolated between the two keys the time falls between.
+ *
+ * The keys are unevenly spaced — the thinning in `build-meshes.mjs` leaves them
+ * where the curve bends and nowhere else — so the pair has to be searched for.
+ * It is a walk rather than a bisection because the times are asked for in
+ * order, both as the page plays and as the fit sweeps, so the pair wanted is
+ * almost always at or just after the last one found.
+ */
+function keyAt(track: ClipTrack, time: number): { turn: Quaternion; scale: number } {
+  const last = track.t.length - 1;
+  let hi = 1;
+  while (hi < last && track.t[hi]! < time) hi++;
+  const lo = hi - 1;
+  const start = track.t[lo]!;
+  const progress = Math.min(
+    1,
+    Math.max(0, (time - start) / (track.t[hi]! - start || 1))
+  );
+  const at = (key: number): Quaternion => [
+    track.q[key * 4]!,
+    track.q[key * 4 + 1]!,
+    track.q[key * 4 + 2]!,
+    track.q[key * 4 + 3]!,
+  ];
+  return {
+    turn: slerp(at(lo), at(hi), progress),
+    scale: track.s[lo]! + (track.s[hi]! - track.s[lo]!) * progress,
+  };
 }
 
 function jointAngle(

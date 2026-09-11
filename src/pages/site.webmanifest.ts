@@ -28,8 +28,8 @@ export const GET: APIRoute = () =>
         name: "OmniDynamics",
         short_name: "OmniDynamics",
         description:
-          "OmniDynamics builds embodied intelligence — drones, quadrupeds, " +
-          "manipulators and humanoids.",
+          "OmniDynamics builds embodied intelligence — drones, manipulators " +
+          "and humanoids.",
         start_url: withBase("/"),
         scope: withBase("/"),
         display: "standalone",

@@ -10,6 +10,8 @@ import { BASE } from "../base";
 
 export type Vec2 = readonly [number, number];
 export type Vec3 = readonly [number, number, number];
+/** A rotation, as (x, y, z, w) — the order glTF writes one in. */
+export type Quaternion = readonly [number, number, number, number];
 
 export const PRISM_SIDE = 0.57;
 export const PRISM_FRONT_Z = 0.315;

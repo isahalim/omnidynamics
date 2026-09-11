@@ -13,6 +13,11 @@ export interface HeroFractalMaterial {
   readonly specularStrength: number;
   readonly ambientStrength: number;
 }
+/** What a part the mesh tags as lit from within gives off. */
+export interface HeroGlowMaterial {
+  readonly color: readonly [number, number, number];
+  readonly strength: number;
+}
 export interface HeroFractalGlass {
   readonly fractalScale: number;
   readonly orbScale: number;
@@ -60,6 +65,18 @@ export const HERO_ORB_MATERIAL = {
   specularStrength: 1.6,
   ambientStrength: 0,
 } satisfies HeroFractalMaterial;
+/**
+ * The core inside the tesseract's shells.
+ *
+ * Every other shape in the glass is the one dark ceramic, and this is the only
+ * thing on the page that is its own light source — so it is pushed well past
+ * white before tone mapping, which is what leaves it reading as a hot core
+ * seen through the shells rather than as a red surface among black ones.
+ */
+export const HERO_GLOW_MATERIAL = {
+  color: [1, 0.012, 0.004],
+  strength: 2.4,
+} satisfies HeroGlowMaterial;
 export const HERO_FRACTAL_GLASS = {
   fractalScale: 0.72,
   orbScale: 0.6,

@@ -6,7 +6,7 @@ import { PRISM_STATES } from "../../lib/glass/models";
 import { withBase } from "../../lib/base";
 
 export function getStaticPaths() {
-  return PRISM_STATES.filter((state) => state.href === null).map((state) => ({
+  return PRISM_STATES.filter((state) => state.soon).map((state) => ({
     params: { state: state.id },
     props: { state },
   }));
@@ -17,19 +17,17 @@ const { state } = Astro.props;
 /** Two lines, as vgpu sets its own — the break is part of the composition. */
 const HEADLINE: Record<string, readonly [string, string]> = {
   drone: ["The autonomous aerial", "platform, coming soon."],
-  quadruped: ["Legged robotics for", "terrain, coming soon."],
   manipulator: ["Precision industrial", "motion, coming soon."],
   robot: ["The humanoid for human", "spaces, coming soon."],
 };
 
 const BLURB: Record<string, string> = {
   drone: "Flight stack, perception and fleet control — talk to us about early access",
-  quadruped: "Terrain wheels cannot cross — talk to us about early access",
   manipulator: "Repeatable industrial motion — talk to us about early access",
   robot: "Built for human-shaped environments — talk to us about early access",
 };
 
-const platforms = PRISM_STATES.filter((entry) => entry.id !== "orb");
+const platforms = PRISM_STATES.filter((entry) => entry.soon);
 const headline = HEADLINE[state.id]!;
 ---
 

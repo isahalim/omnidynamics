@@ -2,7 +2,7 @@
  * The platform held inside the glass.
  *
  * vgpu's glass-fractal example holds one shape in its tetrahedron and morphs it
- * between a fractal and an orb; the landing page holds a drone, a quadruped, a
+ * between a fractal and an orb; the landing page holds a tesseract, a drone, a
  * manipulator or a humanoid, and morphs between them by passing through that
  * orb. Everything here is the example's — its mesh shader, its studio, its
  * morph, and its placement inside the solid — with a registry in front of it so
@@ -21,6 +21,7 @@ import { decodeMesh } from "../glass/hero-glass-assets-core";
 import {
   HERO_FRACTAL_GLASS,
   HERO_FRACTAL_MATERIAL,
+  HERO_GLOW_MATERIAL,
   HERO_ORB_MATERIAL,
   type HeroFractalMaterial,
 } from "../glass/settings";
@@ -46,7 +47,12 @@ const SPIN_PITCH = 0.24;
 /** Every slot the shader poses, left as the identity. */
 const REST_PARTS: Float32Array[] = Array.from({ length: PART_SLOTS }, () => IDENTITY_4);
 
-export type PrismInteriorId = "fractal" | "drone" | "quadruped" | "manipulator" | "robot";
+export type PrismInteriorId =
+  | "fractal"
+  | "chronovoxel"
+  | "drone"
+  | "manipulator"
+  | "robot";
 
 interface InteriorEntry {
   readonly draw: Draw;
@@ -260,6 +266,9 @@ export async function createPrismInterior(
         wholeMesh: active.wholeMesh,
         time: orbTime,
         material,
+        // Only a vertex the mesh tagged reads this, so every shape is handed
+        // the same glow and all but the tesseract ignore it.
+        glow: HERO_GLOW_MATERIAL,
         environmentRotation: frame.environmentRotation,
         environmentExposure: HERO_FRACTAL_GLASS.environmentExposure,
         parts: pose ? pose.parts : REST_PARTS,
@@ -285,6 +294,7 @@ export async function createPrismInterior(
           wholeMesh: 0,
           time: orbTime,
           material,
+          glow: HERO_GLOW_MATERIAL,
           environmentRotation: frame.environmentRotation,
           environmentExposure: HERO_FRACTAL_GLASS.environmentExposure,
           parts: REST_PARTS,

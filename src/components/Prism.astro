@@ -322,9 +322,13 @@ const opening = PRISM_STATES[0]!;
   }
 
   /**
-   * A click on the shape opens it. A finger dragging the shape around also ends
-   * in a click, so a pointer that travelled more than a few pixels is a turn
-   * rather than a tap and is not followed.
+   * A click on the shape opens it: a tool's own site, or the coming-soon page
+   * of a platform that has one. The rest have nowhere to send you and say so
+   * beside the glass, so a click on them turns the shape and nothing else.
+   *
+   * A finger dragging the shape around also ends in a click, so a pointer that
+   * travelled more than a few pixels is a turn rather than a tap and is not
+   * followed.
    */
   const TAP_SLOP = 10;
   let pressedAt: { x: number; y: number } | undefined;
@@ -340,7 +344,9 @@ const opening = PRISM_STATES[0]!;
       : 0;
     pressedAt = undefined;
     if (travelled > TAP_SLOP) return;
-    window.location.href = infoFor.get(current)?.href ?? withBase(`/soon/${current}/`);
+    const info = infoFor.get(current);
+    const destination = info?.href ?? (info?.soon ? withBase(`/soon/${current}/`) : null);
+    if (destination) window.location.href = destination;
   });
 
   /**

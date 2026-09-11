@@ -1,5 +1,5 @@
 /** The column-major 4x4 operations the hero's placement and its rig need. */
-import type { Vec3 } from "./constants";
+import type { Quaternion, Vec3 } from "./constants";
 
 /** `a` applied after `b`, both column-major. */
 export function multiply4(a: Float32Array, b: Float32Array): Float32Array {
@@ -91,6 +91,76 @@ export function rotationAbout(
   out[15] = 1;
   return out;
 }
+
+/**
+ * A turn and a uniform scale taken about `pivot` rather than the origin: what
+ * one key of a baked clip does to the part hanging off that joint.
+ *
+ * The scale is uniform because every clip these pages play states it that way,
+ * which is what lets a key stay a quaternion and a number — and it leaves the
+ * mesh shader's `pose * vec4(normal, 0)` pointing where it did, since a uniform
+ * scale only lengthens a normal that is normalised again downstream.
+ */
+export function similarityAbout(
+  rotation: Quaternion,
+  scale: number,
+  pivot: readonly [number, number, number]
+): Float32Array {
+  const [x, y, z, w] = rotation;
+  const out = new Float32Array(16);
+  out[0] = scale * (1 - 2 * (y * y + z * z));
+  out[1] = scale * 2 * (x * y + z * w);
+  out[2] = scale * 2 * (x * z - y * w);
+  out[4] = scale * 2 * (x * y - z * w);
+  out[5] = scale * (1 - 2 * (x * x + z * z));
+  out[6] = scale * 2 * (y * z + x * w);
+  out[8] = scale * 2 * (x * z + y * w);
+  out[9] = scale * 2 * (y * z - x * w);
+  out[10] = scale * (1 - 2 * (x * x + y * y));
+  // The pivot stays put: translate by it, less where the turn sent it.
+  for (let row = 0; row < 3; row++) {
+    out[12 + row] =
+      pivot[row]! -
+      (out[row]! * pivot[0]! + out[4 + row]! * pivot[1]! + out[8 + row]! * pivot[2]!);
+  }
+  out[15] = 1;
+  return out;
+}
+
+/**
+ * Part of the way from one rotation to another, along the shorter arc.
+ *
+ * Both ends of a baked clip's key pair are close together, and so are the rest
+ * position and any key it is faded toward, so the small-angle case is the one
+ * that runs almost every time; the arc is only worth taking properly when the
+ * two are far enough apart for a straight line between them to sag.
+ */
+export function slerp(a: Quaternion, b: Quaternion, t: number): Quaternion {
+  let cosine = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
+  let end = b;
+  if (cosine < 0) {
+    cosine = -cosine;
+    end = [-b[0], -b[1], -b[2], -b[3]];
+  }
+  let from = 1 - t;
+  let to = t;
+  if (cosine < 0.9995) {
+    const angle = Math.acos(cosine);
+    const sine = Math.sin(angle);
+    from = Math.sin(from * angle) / sine;
+    to = Math.sin(to * angle) / sine;
+  }
+  const out: Quaternion = [
+    a[0] * from + end[0] * to,
+    a[1] * from + end[1] * to,
+    a[2] * from + end[2] * to,
+    a[3] * from + end[3] * to,
+  ];
+  const length = Math.hypot(out[0], out[1], out[2], out[3]) || 1;
+  return [out[0] / length, out[1] / length, out[2] / length, out[3] / length];
+}
+
+export const IDENTITY_QUATERNION: Quaternion = [0, 0, 0, 1];
 
 export const IDENTITY_4 = new Float32Array([
   1, 0, 0, 0,

@@ -1,13 +1,14 @@
 /**
- * Converts the Spline GLB exports into vgpu's HGP2 mesh format so the glass
- * prism can render them with the same ceramic material and sphere morph it
- * uses for its own fractal.
+ * Converts the GLB exports into vgpu's HGP2 mesh format so the glass prism can
+ * render them with the same ceramic material and sphere morph it uses for its
+ * own fractal.
  *
  * HGP2 layout (see src/lib/glass/hero-glass-assets-core.ts):
  *   header 40B  : "HGP2", vertexCount u32, indexCount u32, stride u32 (24),
  *                 meshMin f32x3, meshMax f32x3
  *   vertex 24B  : packed_position unorm16x4 (xyz in [meshMin,meshMax], w = AO)
- *                 packed_normal   snorm16x4 (w = rig part index / PART_SCALE)
+ *                 packed_normal   snorm16x4 (w = rig part index / PART_SCALE,
+ *                                   plus GLOW_BIAS for a lit-from-within part)
  *                 packed_sphere   snorm16x4 (xyz sphere target, w = orb AO)
  *   indices     : uint16
  *
@@ -19,6 +20,12 @@
  * it belongs to, and the parts table is written beside the mesh for the page to
  * pose at runtime.
  * See `src/lib/prism/rig.ts`.
+ *
+ * A model can also arrive with the motion already authored, as the tesseract
+ * does: nine nested shells, each on its own curve of turn and breath. Nothing
+ * written by hand would be that animation, so it is read out of the GLB with
+ * the joints, carried into the finished mesh's own frame, and thinned to the
+ * keys the curve actually needs. `model-clips.json` is what comes out.
  */
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { NodeIO } from "@gltf-transform/core";
@@ -44,7 +51,7 @@ const SPHERE_EQUALIZE = [
  *
  * Flowing all the way to an even cover is the wrong target: it moves every
  * vertex, and these meshes arrive as hundreds of disconnected pieces, so a
- * subject that already closes into a sphere — the drone, the quadruped — comes
+ * subject that already closes into a sphere — the drone, the tesseract — comes
  * out shattered into fragments sliding over one another. Clamping the density
  * at this floor before the gradient is taken means a direction that is already
  * covered feels no pull at all, and only the neighbourhood of a bald patch
@@ -66,13 +73,39 @@ const AO_MAX_STEPS = 26;
 const PART_SCALE = 64;
 const MAX_PARTS = 16; // PART_SLOTS in hero-fractal-mesh.wgsl
 
+/**
+ * What is added to `packed_normal.w` for a vertex the shader should light from
+ * within rather than off the studio.
+ *
+ * There is no lane left for a second tag, but the part index only ever reaches
+ * 15/64, so the top three quarters of the range are free. Adding a half puts a
+ * glowing part well clear of every solid one, and snorm16 still round-trips
+ * both the offset and the index it carries. It has to match `GLOW_BIAS` in
+ * `hero-fractal-mesh.wgsl`.
+ */
+const GLOW_BIAS = 0.5;
+
+/**
+ * How far a thinned animation may drift from the curve it was baked at: a
+ * quarter of a degree of turn, and a five-hundredth of a joint's size.
+ *
+ * A shape drawn a few hundred pixels across moves less than one of them under
+ * either, so the clip that ships is the clip that was authored at a fifth of
+ * the keys.
+ */
+const CLIP_ANGLE_TOLERANCE = 0.004;
+const CLIP_SCALE_TOLERANCE = 0.002;
+
 // Each Spline export also ships its presentation wordmark, a floor plane and a
 // camera target. Those dominate the bounding box, so keep only the subject.
 //
-// `joints` names the nodes each Spline scene animates, in the order they become
-// part indices — part 0 is always the rest of the subject. A node nested inside
+// `joints` names the nodes each scene moves, in the order they become part
+// indices — part 0 is always the rest of the subject. A node nested inside
 // another joint takes the inner part, and the parts table records the nesting
 // so a pose composes down the chain the way the scene's own hierarchy does.
+// `clip` names an animation to read the joints' motion out of, for a scene
+// that authored it rather than leaving it to `rig.ts`; `glow` names the
+// materials whose vertices are lit from within rather than off the studio.
 const MODELS = [
   {
     id: "drone",
@@ -84,13 +117,28 @@ const MODELS = [
     joints: [{ node: "Rotation", as: "rotor" }],
   },
   {
-    id: "quadruped",
-    src: "assets/models/baloon_dog.glb",
-    keep: ["Group 11"],
-    radius: 0.98,
-    yaw: 0.6,
-    // The balloon dog's head, on the end of the nested lean groups.
-    joints: [{ node: "Group 7", as: "head" }],
+    id: "chronovoxel",
+    src: "assets/models/dark_tesseract.glb",
+    keep: ["GLTF_SceneRootNode"],
+    radius: 0.94,
+    yaw: 0,
+    // Nine nested shells, each turning and breathing on a curve of its own.
+    // They are the whole subject, so every one of them is a joint, and the
+    // clip beside them is what moves them.
+    joints: [
+      { node: "Cube_0", as: "shell" },
+      { node: "Cube.001_3", as: "shell" },
+      { node: "Cube.002_4", as: "shell" },
+      { node: "Cube.003_5", as: "shell" },
+      { node: "Cube.004_6", as: "shell" },
+      { node: "Cube.005_7", as: "shell" },
+      { node: "Cube.006_8", as: "shell" },
+      { node: "Cube.007_9", as: "shell" },
+      { node: "Cube.008_10", as: "shell" },
+    ],
+    clip: "Animation",
+    // The core inside each shell: the vertices the shader lights from within.
+    glow: ["inner"],
   },
   {
     id: "manipulator",
@@ -142,14 +190,18 @@ const MODELS = [
 
 const io = new NodeIO().registerExtensions(KHRONOS_EXTENSIONS);
 const rigs = {};
+const clips = {};
 
 for (const model of MODELS) {
   process.stdout.write(`\n${model.id}: `);
   const doc = await io.read(model.src);
   prune(doc, model.keep);
   // Before anything flattens the hierarchy: the joints are found by name in the
-  // tree Spline authored, and every vertex is stamped with the part it is in.
+  // tree the scene authored, every vertex is stamped with the part it is in,
+  // and any clip is read while the nodes it targets still stand where it was
+  // authored against them.
   const joints = tagParts(doc, model.joints ?? []);
+  const motion = model.clip ? readClip(doc, model.clip, joints) : undefined;
 
   await doc.transform(
     dedup(),
@@ -158,7 +210,7 @@ for (const model of MODELS) {
     weld({ tolerance: 0.0001 })
   );
 
-  let { positions, normals, indices, parts } = collect(doc);
+  let { positions, normals, indices, parts, glow } = collect(doc, model.glow);
   process.stdout.write(`${positions.length / 3} verts -> `);
 
   // meshopt honours its error bound over the ratio, so tighten in passes until
@@ -169,7 +221,7 @@ for (const model of MODELS) {
     await doc.transform(
       simplify({ simplifier: MeshoptSimplifier, ratio, error, lockBorder: false })
     );
-    ({ positions, normals, indices, parts } = collect(doc));
+    ({ positions, normals, indices, parts, glow } = collect(doc, model.glow));
     process.stdout.write(`${positions.length / 3} -> `);
   }
   if (positions.length / 3 > MAX_VERTICES) {
@@ -185,20 +237,31 @@ for (const model of MODELS) {
 
   const ao = occlusion(positions, normals, indices);
   const sphere = sphereDirections(positions);
-  const out = encode(positions, normals, indices, ao, sphere, parts);
+  const out = encode(positions, normals, indices, ao, sphere, parts, glow);
   rigs[model.id] = rigTable(joints, positions, parts, model.yaw, placement);
+  if (motion) clips[model.id] = clipTable(motion, model.yaw);
 
   mkdirSync("public/glass/models", { recursive: true });
   writeFileSync(`public/glass/models/${model.id}.mesh`, out);
   console.log(
     `${positions.length / 3} verts, ${indices.length / 3} tris, ` +
       `${(out.byteLength / 1024).toFixed(0)} KB, ` +
-      `parts ${rigs[model.id].map((part) => `${part.name}:${part.count}`).join(" ")}`
+      `parts ${rigs[model.id].map((part) => `${part.name}:${part.count}`).join(" ")}` +
+      (glow ? `, glowing ${glow.reduce((n, v) => n + v, 0)}` : "") +
+      (clips[model.id]
+        ? `, clip ${clips[model.id].duration.toFixed(2)}s in ` +
+          `${Object.values(clips[model.id].parts).reduce(
+            (n, track) => n + track.t.length,
+            0
+          )} keys`
+        : "")
   );
 }
 
 writeFileSync("src/lib/glass/model-rigs.json", `${JSON.stringify(rigs, null, 2)}\n`);
 console.log("\nwrote src/lib/glass/model-rigs.json");
+writeFileSync("src/lib/glass/model-clips.json", `${JSON.stringify(clips, null, 2)}\n`);
+console.log("wrote src/lib/glass/model-clips.json");
 
 /**
  * Keeps only the named subject subtrees. Ancestors are retained so the world
@@ -406,9 +469,277 @@ function placeDirection([x, y, z], yaw) {
   return [c * x + s * z, y, -s * x + c * z];
 }
 
-/** Merges every primitive in the document into flat world-space arrays. */
-function collect(doc) {
-  const P = [], N = [], I = [], parts = [];
+/**
+ * Reads a scene's own animation off the joints it drives, while the hierarchy
+ * it was authored against is still standing.
+ *
+ * What is kept of a joint is the curve itself, plus the two things needed to
+ * restate it in the finished mesh's coordinates: the transform it was baked in,
+ * which the motion is the difference from, and the frame it hangs in, which the
+ * turn has to be seen from once the mesh has been yawed and normalised.
+ */
+function readClip(doc, name, parts) {
+  const animations = doc.getRoot().listAnimations();
+  const animation = animations.find((entry) => entry.getName() === name) ?? animations[0];
+  if (!animation) throw new Error(`animation "${name}" is not in the file`);
+
+  const tracks = new Map();
+  for (const channel of animation.listChannels()) {
+    const path = channel.getTargetPath();
+    const node = channel.getTargetNode();
+    // Nothing in these scenes moves a joint off its own origin, and a joint
+    // that stayed put is what lets the pose be a turn about a fixed pivot.
+    if (!node || (path !== "rotation" && path !== "scale")) continue;
+    const sampler = channel.getSampler();
+    const output = sampler.getOutput();
+    const size = output.getElementSize();
+    const values = [];
+    for (let i = 0; i < output.getCount(); i++)
+      values.push(output.getElement(i, new Array(size).fill(0)));
+    let track = tracks.get(node);
+    if (!track) tracks.set(node, (track = {}));
+    track[path] = { times: Array.from(sampler.getInput().getArray()), values };
+  }
+
+  const read = parts
+    .filter((part) => part.node && tracks.has(part.node))
+    .map((part) => ({
+      name: part.name,
+      ...tracks.get(part.node),
+      bindRotation: part.node.getRotation(),
+      bindScale: uniformScale(part.node.getScale(), part.name),
+      frame: matrixQuaternion(parentWorldMatrix(part.node)),
+    }));
+  if (!read.length) throw new Error(`animation "${name}" drives none of the joints`);
+  return read;
+}
+
+/**
+ * The clip the page plays: each joint's turn and breath, in the finished mesh's
+ * own frame, on a timeline starting at zero.
+ *
+ * Every scale in these scenes is uniform, which is what keeps a key down to a
+ * quaternion and a number: a turn with a uniform scale is still a turn with a
+ * uniform scale after it has been carried into another frame, where a scale
+ * that stretched one axis would have to ship a whole matrix. The pivot the two
+ * are applied about is the joint's own, which the parts table already carries.
+ */
+function clipTable(tracks, yaw) {
+  const yawTurn = [0, Math.sin(yaw / 2), 0, Math.cos(yaw / 2)];
+  let start = Infinity;
+  let end = -Infinity;
+  for (const track of tracks)
+    for (const channel of [track.rotation, track.scale]) {
+      if (!channel) continue;
+      start = Math.min(start, channel.times[0]);
+      end = Math.max(end, channel.times[channel.times.length - 1]);
+    }
+
+  const parts = {};
+  for (const track of tracks) {
+    const frame = multiplyQuaternions(yawTurn, track.frame);
+    const rest = conjugateQuaternion(normalizeQuaternion(track.bindRotation));
+    const times = [
+      ...new Set([start, ...(track.rotation?.times ?? []), ...(track.scale?.times ?? []), end]),
+    ]
+      .filter((time) => time >= start && time <= end)
+      .sort((a, b) => a - b);
+
+    const keys = [];
+    for (const time of times) {
+      const turn = multiplyQuaternions(sampleRotation(track.rotation, time), rest);
+      // The same turn, seen from the frame the mesh ended up in. The uniform
+      // scale rides through untouched, and so does the mesh's own, which
+      // cancels against itself.
+      const q = multiplyQuaternions(
+        multiplyQuaternions(frame, turn),
+        conjugateQuaternion(frame)
+      );
+      // Slerp takes the short way round, so a key on the far side of a half
+      // turn from the last one has to be brought back to the same hemisphere.
+      const previous = keys[keys.length - 1]?.q;
+      const flip = previous && dotQuaternions(previous, q) < 0 ? -1 : 1;
+      keys.push({
+        t: time - start,
+        q: q.map((value) => value * flip),
+        s: sampleScale(track.scale, time) / track.bindScale,
+      });
+    }
+
+    const thinned = thinKeys(keys);
+    parts[track.name] = {
+      t: thinned.map((key) => round(key.t)),
+      q: thinned.flatMap((key) => key.q.map(round)),
+      s: thinned.map((key) => round(key.s)),
+    };
+  }
+  return { duration: round(end - start), parts };
+}
+
+/**
+ * Drops every key the curve can be redrawn without.
+ *
+ * The keys arrive at whatever rate the clip was baked at — a couple of hundred
+ * for a ten-second ease, most of them on a line between their neighbours — and
+ * all of that would otherwise ship in the page's own bundle. So the curve is
+ * split at its worst-fitting key and again either side, until what is left
+ * redraws the original to within a tolerance nothing on screen can show.
+ */
+function thinKeys(keys) {
+  const keep = new Array(keys.length).fill(false);
+  keep[0] = true;
+  keep[keys.length - 1] = true;
+  const split = (lo, hi) => {
+    let worst = 1;
+    let at = -1;
+    for (let i = lo + 1; i < hi; i++) {
+      const span = keys[hi].t - keys[lo].t || 1;
+      const progress = (keys[i].t - keys[lo].t) / span;
+      const error = Math.max(
+        quaternionAngle(slerp(keys[lo].q, keys[hi].q, progress), keys[i].q) /
+          CLIP_ANGLE_TOLERANCE,
+        Math.abs(keys[lo].s + (keys[hi].s - keys[lo].s) * progress - keys[i].s) /
+          CLIP_SCALE_TOLERANCE
+      );
+      if (error > worst) {
+        worst = error;
+        at = i;
+      }
+    }
+    if (at < 0) return;
+    keep[at] = true;
+    split(lo, at);
+    split(at, hi);
+  };
+  split(0, keys.length - 1);
+  return keys.filter((_, index) => keep[index]);
+}
+
+function sampleRotation(channel, time) {
+  if (!channel) return [0, 0, 0, 1];
+  const { lo, hi, progress } = span(channel.times, time);
+  return slerp(
+    normalizeQuaternion(channel.values[lo]),
+    normalizeQuaternion(channel.values[hi]),
+    progress
+  );
+}
+
+function sampleScale(channel, time) {
+  if (!channel) return 1;
+  const { lo, hi, progress } = span(channel.times, time);
+  const a = uniformScale(channel.values[lo], "scale");
+  return a + (uniformScale(channel.values[hi], "scale") - a) * progress;
+}
+
+/** The pair of keys a time falls between, and how far it is across them. */
+function span(times, time) {
+  if (time <= times[0]) return { lo: 0, hi: 0, progress: 0 };
+  const last = times.length - 1;
+  if (time >= times[last]) return { lo: last, hi: last, progress: 0 };
+  let hi = 1;
+  while (hi < last && times[hi] < time) hi++;
+  return { lo: hi - 1, hi, progress: (time - times[hi - 1]) / (times[hi] - times[hi - 1]) };
+}
+
+/** A scale that is the same on all three axes, or a build that has to be told. */
+function uniformScale([x, y, z], where) {
+  if (Math.abs(x - y) > 1e-4 * Math.abs(x) || Math.abs(x - z) > 1e-4 * Math.abs(x))
+    throw new Error(`${where}: a clip key scales ${x}, ${y}, ${z} — not uniform`);
+  return x;
+}
+
+function parentWorldMatrix(node) {
+  const parent = node.getParentNode?.();
+  return typeof parent?.getWorldMatrix === "function" ? parent.getWorldMatrix() : undefined;
+}
+
+/**
+ * The rotation a column-major matrix carries, as a quaternion.
+ *
+ * Only the direction of each basis vector is taken, so a frame that also
+ * scales — uniformly, as every one in these scenes does — reads as the turn
+ * alone. That is all the conjugation needs: a uniform scale is unchanged by it.
+ */
+function matrixQuaternion(m) {
+  if (!m) return [0, 0, 0, 1];
+  const column = (index) => {
+    const v = [m[index * 4], m[index * 4 + 1], m[index * 4 + 2]];
+    const length = Math.hypot(v[0], v[1], v[2]) || 1;
+    return v.map((value) => value / length);
+  };
+  const [a, b, c] = [column(0), column(1), column(2)];
+  const trace = a[0] + b[1] + c[2];
+  if (trace > 0) {
+    const root = Math.sqrt(trace + 1) * 2;
+    return [(b[2] - c[1]) / root, (c[0] - a[2]) / root, (a[1] - b[0]) / root, root / 4];
+  }
+  if (a[0] > b[1] && a[0] > c[2]) {
+    const root = Math.sqrt(1 + a[0] - b[1] - c[2]) * 2;
+    return [root / 4, (b[0] + a[1]) / root, (c[0] + a[2]) / root, (b[2] - c[1]) / root];
+  }
+  if (b[1] > c[2]) {
+    const root = Math.sqrt(1 + b[1] - a[0] - c[2]) * 2;
+    return [(b[0] + a[1]) / root, root / 4, (c[1] + b[2]) / root, (c[0] - a[2]) / root];
+  }
+  const root = Math.sqrt(1 + c[2] - a[0] - b[1]) * 2;
+  return [(c[0] + a[2]) / root, (c[1] + b[2]) / root, root / 4, (a[1] - b[0]) / root];
+}
+
+function multiplyQuaternions(a, b) {
+  return [
+    a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1],
+    a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0],
+    a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3],
+    a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2],
+  ];
+}
+
+function conjugateQuaternion(q) {
+  return [-q[0], -q[1], -q[2], q[3]];
+}
+
+function dotQuaternions(a, b) {
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
+}
+
+function normalizeQuaternion(q) {
+  const length = Math.hypot(q[0], q[1], q[2], q[3]) || 1;
+  return [q[0] / length, q[1] / length, q[2] / length, q[3] / length];
+}
+
+function slerp(a, b, t) {
+  let cosine = dotQuaternions(a, b);
+  let end = b;
+  if (cosine < 0) {
+    cosine = -cosine;
+    end = [-b[0], -b[1], -b[2], -b[3]];
+  }
+  if (cosine > 0.9995)
+    return normalizeQuaternion(a.map((value, i) => value + (end[i] - value) * t));
+  const angle = Math.acos(cosine);
+  const sine = Math.sin(angle);
+  const from = Math.sin((1 - t) * angle) / sine;
+  const to = Math.sin(t * angle) / sine;
+  return a.map((value, i) => value * from + end[i] * to);
+}
+
+/** How far apart two rotations are, in radians. */
+function quaternionAngle(a, b) {
+  return 2 * Math.acos(Math.min(1, Math.abs(dotQuaternions(a, b))));
+}
+
+/**
+ * Merges every primitive in the document into flat world-space arrays.
+ *
+ * `glowMaterials` names the materials that are lit from within. A material is
+ * the one thing about a vertex that survives the whole pipeline untouched —
+ * `join` merges by it and `weld` never crosses it — so a primitive's material
+ * is still the one its author gave it, and the flag can be read off it here
+ * rather than stamped in as an attribute the way the part index has to be.
+ */
+function collect(doc, glowMaterials) {
+  const P = [], N = [], I = [], parts = [], glow = glowMaterials ? [] : undefined;
   for (const node of doc.getRoot().listNodes()) {
     const mesh = node.getMesh();
     if (!mesh) continue;
@@ -420,7 +751,10 @@ function collect(doc) {
       const part = prim.getAttribute("_PART");
       const idx = prim.getIndices();
       const base = P.length / 3;
+      const material = prim.getMaterial()?.getName() ?? "";
+      const lit = glowMaterials?.some((name) => material.startsWith(name)) ? 1 : 0;
       for (let i = 0; i < pos.getCount(); i++) {
+        glow?.push(lit);
         parts.push(part ? Math.round(part.getScalar(i)) : 0);
         const p = pos.getElement(i, [0, 0, 0]);
         P.push(
@@ -439,7 +773,9 @@ function collect(doc) {
       else for (let i = 0; i < pos.getCount(); i++) I.push(base + i);
     }
   }
-  return { positions: P, normals: N, indices: I, parts };
+  if (glow && !glow.includes(1))
+    throw new Error(`no material matched [${glowMaterials.join(", ")}]`);
+  return { positions: P, normals: N, indices: I, parts, glow };
 }
 
 /** Spline authors Y-up already; this only applies the per-model presentation yaw. */
@@ -569,8 +905,8 @@ function fibonacci(n) {
  *
  * It used to be the vertex's own direction, taken to the orb's radius. For a
  * compact subject that is already a sphere — the drone's body and the
- * quadruped's cover nearly every direction out of their centre, so projecting
- * them outward closes into one. A robot arm does not: two fifths of the
+ * tesseract's shells cover nearly every direction out of their centre, so
+ * projecting them outward closes into one. A robot arm does not: two fifths of the
  * directions around its centre have no surface in them at all, and the "orb" it
  * morphs into is a ribbon with a hole through it. That is what tore in the
  * transition, and why the swap to the real orb at the end of the morph — the
@@ -704,7 +1040,7 @@ function logDensityGradient(x, y, z, grid, W, H, floor) {
   ];
 }
 
-function encode(P, N, I, ao, sphere, parts) {
+function encode(P, N, I, ao, sphere, parts, glow) {
   const count = P.length / 3;
   let lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
   for (let i = 0; i < P.length; i += 3)
@@ -734,7 +1070,11 @@ function encode(P, N, I, ao, sphere, parts) {
       v.setUint16(o + a * 2, un((P[p + a] - lo[a]) / span[a]), true);
     v.setUint16(o + 6, un(ao[i]), true);
     for (let a = 0; a < 3; a++) v.setInt16(o + 8 + a * 2, sn(N[p + a]), true);
-    v.setInt16(o + 14, sn((parts?.[i] ?? 0) / PART_SCALE), true);
+    v.setInt16(
+      o + 14,
+      sn((parts?.[i] ?? 0) / PART_SCALE + (glow?.[i] ? GLOW_BIAS : 0)),
+      true
+    );
     for (let a = 0; a < 3; a++)
       v.setInt16(o + 16 + a * 2, sn(sphere[p + a] * SPHERE_RADIUS), true);
     v.setInt16(o + 22, sn(1), true); // orb state carries no occlusion

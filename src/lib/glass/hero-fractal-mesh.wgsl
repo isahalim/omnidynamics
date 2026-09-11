@@ -24,12 +24,29 @@ const RUBBER_F0 = vec3f(0.028);
 const PART_SLOTS = 16;
 const PART_SCALE = 64.0;
 
+/**
+ * What is added to that same lane for a vertex lit from within.
+ *
+ * The vertex layout is full, and a part index never reaches a quarter of the
+ * lane's range, so the tag rides in the headroom above it: anything past
+ * GLOW_THRESHOLD is glowing, and the index is what is left once the bias is
+ * taken off. `scripts/build-meshes.mjs` writes it.
+ */
+const GLOW_BIAS = 0.5;
+const GLOW_THRESHOLD = 0.25;
+
 struct SoftRubberMaterial {
   baseColor: vec3f,
   roughness: f32,
   diffuseStrength: f32,
   specularStrength: f32,
   ambientStrength: f32,
+}
+
+/** What a vertex tagged as lit from within glows, and how hard. */
+struct GlowMaterial {
+  color: vec3f,
+  strength: f32,
 }
 
 struct MeshParams {
@@ -43,6 +60,7 @@ struct MeshParams {
   wholeMesh: f32,
   time: f32,
   material: SoftRubberMaterial,
+  glow: GlowMaterial,
   environmentRotation: mat4x4f,
   environmentExposure: f32,
   /**
@@ -63,6 +81,14 @@ struct VertexOut {
   @location(0) worldPosition: vec3f,
   @location(1) worldNormal: vec3f,
   @location(2) ambientOcclusion: f32,
+  /**
+   * How much of this vertex is lit from within: its own tag, faded out by the
+   * morph. A triangle never straddles the tag — the materials it separates are
+   * separate primitives all the way through the build — so this interpolates
+   * across a face that is wholly one or wholly the other, and the orb every
+   * shape resolves to carries no glow at all.
+   */
+  @location(3) glow: f32,
 };
 
 @vertex fn vs_main(
@@ -74,10 +100,12 @@ struct VertexOut {
   let bakedPosition = mix(params.meshMin, params.meshMax, packed_position.xyz);
   // Only a model mesh carries a rig. vgpu's own fractal ships 1.0 in this lane,
   // which would read as a part it has no table for, so it is pinned to slot 0.
+  let tagged = params.wholeMesh > 0.5;
+  let glow = select(0.0, 1.0, tagged && packed_normal.w >= GLOW_THRESHOLD);
   let part = select(
     0,
-    clamp(i32(round(packed_normal.w * PART_SCALE)), 0, PART_SLOTS - 1),
-    params.wholeMesh > 0.5,
+    clamp(i32(round((packed_normal.w - glow * GLOW_BIAS) * PART_SCALE)), 0, PART_SLOTS - 1),
+    tagged,
   );
   let pose = params.parts[part];
   // The pose is rigid, so it moves the normal with the same matrix, and the
@@ -117,6 +145,7 @@ struct VertexOut {
   out.worldPosition = world.xyz;
   out.worldNormal = normalize((params.model * vec4f(morphNormal, 0.0)).xyz);
   out.ambientOcclusion = mix(packed_position.w, packed_sphere.w, sphereMix);
+  out.glow = glow * (1.0 - sphereMix);
   return out;
 }
 
@@ -155,15 +184,30 @@ fn fresnelSchlick(cosine: f32) -> vec3f {
     reflectedDirection,
     roughness * maxEnvironmentLevel,
   );
-  let diffuse = params.material.baseColor * diffuseEnvironment * (
+  // A part lit from within takes the glow's colour as its own as well, so what
+  // the studio does reach it is the same colour as what it gives off — a core
+  // that reads as hot rather than as a red lamp behind grey.
+  let glow = clamp(in.glow, 0.0, 1.0);
+  let baseColor = mix(params.material.baseColor, params.glow.color, glow);
+  let diffuse = baseColor * diffuseEnvironment * (
     params.material.diffuseStrength + params.material.ambientStrength * 0.35
   );
   let specular = specularEnvironment * fresnel *
     params.material.specularStrength * mix(0.82, 0.34, roughness);
-  let grazingSheen = params.material.baseColor * diffuseEnvironment *
+  let grazingSheen = baseColor * diffuseEnvironment *
     pow(1.0 - facing, 2.0) * roughness * 0.28;
   let ambientOcclusion = clamp(in.ambientOcclusion, 0.0, 1.0);
   let rubber = (diffuse * (vec3f(1.0) - fresnel) + grazingSheen) *
     ambientOcclusion + specular * mix(0.45, 1.0, ambientOcclusion);
-  return presentCeramic(rubber);
+  // Emission is the one term the studio has no say in and occlusion does not
+  // dim: it is the surface's own light, brightest where it faces away.
+  //
+  // The spread matters more than the level. Red is already past white by the
+  // time the tone curve sees it, so the falloff shows in the channels beside
+  // it instead — deep red where a face is square on, running hot toward orange
+  // where one turns away — and that gradient is the whole difference between a
+  // core that glows and a surface painted red.
+  let emission = params.glow.color * params.glow.strength * glow *
+    mix(0.45, 1.3, 1.0 - facing);
+  return presentCeramic(rubber + emission);
 }
