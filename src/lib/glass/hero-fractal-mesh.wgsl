@@ -12,6 +12,7 @@ import {
   rotateHeroEnvironmentDirection,
   sampleHeroEnvironmentLevel,
 } from "./hero-glass-environment.wgsl";
+import { HeroCoreLight, heroCoreDirection, heroCoreIrradiance } from "./hero-core-light.wgsl";
 
 const RUBBER_F0 = vec3f(0.028);
 
@@ -25,15 +26,21 @@ const PART_SLOTS = 16;
 const PART_SCALE = 64.0;
 
 /**
- * What is added to that same lane for a vertex lit from within.
+ * What is added to that same lane for a vertex on an inner surface.
  *
  * The vertex layout is full, and a part index never reaches a quarter of the
  * lane's range, so the tag rides in the headroom above it: anything past
- * GLOW_THRESHOLD is glowing, and the index is what is left once the bias is
- * taken off. `scripts/build-meshes.mjs` writes it.
+ * INNER_THRESHOLD is an inner surface, and the index is what is left once the
+ * bias is taken off. `scripts/build-meshes.mjs` writes it.
+ *
+ * It says nothing about the material any more. The tesseract's inner surfaces
+ * used to stand in for the light at its centre by being emissive themselves,
+ * which is a painted-on answer to the question; there is an actual lamp in
+ * there now, and every surface it lights is the one dark ceramic. All the tag
+ * still does is keep the two sets of vertices apart in the part-index lane.
  */
-const GLOW_BIAS = 0.5;
-const GLOW_THRESHOLD = 0.25;
+const INNER_BIAS = 0.5;
+const INNER_THRESHOLD = 0.25;
 
 struct SoftRubberMaterial {
   baseColor: vec3f,
@@ -41,12 +48,6 @@ struct SoftRubberMaterial {
   diffuseStrength: f32,
   specularStrength: f32,
   ambientStrength: f32,
-}
-
-/** What a vertex tagged as lit from within glows, and how hard. */
-struct GlowMaterial {
-  color: vec3f,
-  strength: f32,
 }
 
 struct MeshParams {
@@ -60,7 +61,8 @@ struct MeshParams {
   wholeMesh: f32,
   time: f32,
   material: SoftRubberMaterial,
-  glow: GlowMaterial,
+  /** The lamp at the centre of the shape, or one at no strength for a shape with none. */
+  core: HeroCoreLight,
   environmentRotation: mat4x4f,
   environmentExposure: f32,
   /**
@@ -81,14 +83,6 @@ struct VertexOut {
   @location(0) worldPosition: vec3f,
   @location(1) worldNormal: vec3f,
   @location(2) ambientOcclusion: f32,
-  /**
-   * How much of this vertex is lit from within: its own tag, faded out by the
-   * morph. A triangle never straddles the tag — the materials it separates are
-   * separate primitives all the way through the build — so this interpolates
-   * across a face that is wholly one or wholly the other, and the orb every
-   * shape resolves to carries no glow at all.
-   */
-  @location(3) glow: f32,
 };
 
 @vertex fn vs_main(
@@ -101,10 +95,10 @@ struct VertexOut {
   // Only a model mesh carries a rig. vgpu's own fractal ships 1.0 in this lane,
   // which would read as a part it has no table for, so it is pinned to slot 0.
   let tagged = params.wholeMesh > 0.5;
-  let glow = select(0.0, 1.0, tagged && packed_normal.w >= GLOW_THRESHOLD);
+  let inner = select(0.0, 1.0, tagged && packed_normal.w >= INNER_THRESHOLD);
   let part = select(
     0,
-    clamp(i32(round((packed_normal.w - glow * GLOW_BIAS) * PART_SCALE)), 0, PART_SLOTS - 1),
+    clamp(i32(round((packed_normal.w - inner * INNER_BIAS) * PART_SCALE)), 0, PART_SLOTS - 1),
     tagged,
   );
   let pose = params.parts[part];
@@ -145,7 +139,6 @@ struct VertexOut {
   out.worldPosition = world.xyz;
   out.worldNormal = normalize((params.model * vec4f(morphNormal, 0.0)).xyz);
   out.ambientOcclusion = mix(packed_position.w, packed_sphere.w, sphereMix);
-  out.glow = glow * (1.0 - sphereMix);
   return out;
 }
 
@@ -184,11 +177,7 @@ fn fresnelSchlick(cosine: f32) -> vec3f {
     reflectedDirection,
     roughness * maxEnvironmentLevel,
   );
-  // A part lit from within takes the glow's colour as its own as well, so what
-  // the studio does reach it is the same colour as what it gives off — a core
-  // that reads as hot rather than as a red lamp behind grey.
-  let glow = clamp(in.glow, 0.0, 1.0);
-  let baseColor = mix(params.material.baseColor, params.glow.color, glow);
+  let baseColor = params.material.baseColor;
   let diffuse = baseColor * diffuseEnvironment * (
     params.material.diffuseStrength + params.material.ambientStrength * 0.35
   );
@@ -199,15 +188,36 @@ fn fresnelSchlick(cosine: f32) -> vec3f {
   let ambientOcclusion = clamp(in.ambientOcclusion, 0.0, 1.0);
   let rubber = (diffuse * (vec3f(1.0) - fresnel) + grazingSheen) *
     ambientOcclusion + specular * mix(0.45, 1.0, ambientOcclusion);
-  // Emission is the one term the studio has no say in and occlusion does not
-  // dim: it is the surface's own light, brightest where it faces away.
+
+  // And then the lamp inside the shape, which is the one light in the scene
+  // that is in the scene: the studio above is an environment sampled by
+  // direction and has no position to have a distance from, so nothing lit by it
+  // can be nearer to it or further from it. A surface a shell away from the
+  // core is lit; one four shells away is barely touched; and that difference is
+  // what tells you the light is coming from somewhere inside rather than
+  // sitting on the surfaces.
   //
-  // The spread matters more than the level. Red is already past white by the
-  // time the tone curve sees it, so the falloff shows in the channels beside
-  // it instead — deep red where a face is square on, running hot toward orange
-  // where one turns away — and that gradient is the whole difference between a
-  // core that glows and a surface painted red.
-  let emission = params.glow.color * params.glow.strength * glow *
-    mix(0.45, 1.3, 1.0 - facing);
-  return presentCeramic(rubber + emission);
+  // It is wrapped a little past the terminator because the source is a sphere
+  // rather than a point — but only a little: wrapped hard, every surface in the
+  // body takes some of it whichever way it is turned, and what you get is a pale
+  // object rather than a black one with a light inside it. The specular lobe is
+  // taken off the same direction, so a shell turned toward the core catches a
+  // hot edge along the fold, which on a material this dark is most of what is
+  // actually seen of it.
+  let coreDirection = heroCoreDirection(params.core, in.worldPosition);
+  let coreIrradiance = heroCoreIrradiance(
+    params.core,
+    in.worldPosition,
+    normal,
+    0.12,
+  );
+  let coreHalf = normalize(coreDirection + view);
+  let coreHighlight = pow(
+    clamp(dot(normal, coreHalf), 0.0, 1.0),
+    mix(96.0, 8.0, roughness),
+  ) * params.material.specularStrength * 2.5;
+  let core = coreIrradiance *
+    (baseColor * mix(0.35, 1.0, ambientOcclusion) + fresnel * coreHighlight);
+
+  return presentCeramic(rubber + core);
 }

@@ -13,10 +13,56 @@ export interface HeroFractalMaterial {
   readonly specularStrength: number;
   readonly ambientStrength: number;
 }
-/** What a part the mesh tags as lit from within gives off. */
+/** What the core inside the tesseract gives off. */
 export interface HeroGlowMaterial {
   readonly color: readonly [number, number, number];
   readonly strength: number;
+}
+/**
+ * The lamp itself: how big it is, how far its light carries, and what that
+ * light does to the things around it.
+ *
+ * Every length is in the shape's own units, where the model it sits inside is
+ * fitted to a radius of about one — so a radius of 0.22 is a body of light a
+ * fifth of the shape across, standing in the middle of shells that reach out
+ * four times as far.
+ *
+ * `centre` and `bloom` are the two numbers the glow is drawn with, and they are
+ * in the range the image is already in rather than in light: the glow is added
+ * over the scene, so `centre` is how much a line of sight straight through the
+ * middle of it lays on, and `bloom` the same for the wide soft falloff around
+ * it.
+ */
+export interface HeroCoreLight {
+  readonly radius: number;
+  /**
+   * How far it carries, to the ceramic and to the glass.
+   *
+   * They are two numbers rather than one because they are answers about two
+   * distances. The shells are in among the light — the nearest is a tenth of
+   * the shape from it — so what matters there is that it falls off hard enough
+   * for the inner shells to be lit and the outer ones not. The glass stands
+   * three times further out than anything in the body, and a falloff written
+   * for the shells has nothing left by the time it gets there, so it would
+   * either reach the glass or keep the tesseract black, and never both.
+   */
+  readonly range: number;
+  readonly glassRange: number;
+  /** How hard it lights the shells around it. */
+  readonly reach: number;
+  /** How hard it lights the glass it is standing in. */
+  readonly glassReach: number;
+  readonly centre: number;
+  readonly bloom: number;
+  /** How deep the breath in its brightness is, and how often it comes round. */
+  readonly pulse: readonly [number, number];
+  /**
+   * How far the shells have to stand open before any of it gets out, and how
+   * far before all of it does, as a share of the full turn the clip opens them
+   * through. Shut, the body is light-tight: not a trace of it reaches the
+   * ceramic, the glass or the air, and what is in the pyramid is a black box.
+   */
+  readonly escape: readonly [number, number];
 }
 export interface HeroFractalGlass {
   readonly fractalScale: number;
@@ -68,15 +114,58 @@ export const HERO_ORB_MATERIAL = {
 /**
  * The core inside the tesseract's shells.
  *
- * Every other shape in the glass is the one dark ceramic, and this is the only
- * thing on the page that is its own light source — so it is pushed well past
- * white before tone mapping, which is what leaves it reading as a hot core
- * seen through the shells rather than as a red surface among black ones.
+ * Every surface in the glass is the one dark ceramic, and this is the only
+ * thing on the page that is its own light source. It is white, with the warmth
+ * the room's own light has rather than the flat white of a screen — the wall,
+ * its window and its caustic are all a little off neutral, and a light inside
+ * the glass that was not would read as belonging to a different scene.
  */
 export const HERO_GLOW_MATERIAL = {
-  color: [1, 0.012, 0.004],
+  color: [1, 0.965, 0.925],
   strength: 2.4,
 } satisfies HeroGlowMaterial;
+/**
+ * And what it is, as a body standing in the middle of the shells.
+ *
+ * `reach` and `glassReach` are the two numbers worth touching: the first is how
+ * much of the core reaches the ceramic around it, the second how much of it
+ * reaches the glass it is all standing in. Both are answers to the same
+ * question — how much of a room a lamp lights — asked of two materials that
+ * take light in quite different ways.
+ */
+export const HERO_CORE_LIGHT = {
+  // Small. A body of light wide enough to stand behind the shells lays itself
+  // over every one of them, which is the flat emissive answer again by another
+  // route: what has to reach them is the light, not the lamp.
+  radius: 0.22,
+  // Short, inside the body. The light has to stay a local thing there — bright
+  // in the crevice it is standing in and worth almost nothing by the outer
+  // shell — or every surface takes the same amount of it and the tesseract
+  // stops being a dark thing with a light in it. Out at the glass there is
+  // nothing left to keep dark, so it carries three times as far and arrives as
+  // a wash.
+  range: 0.5,
+  glassRange: 1.5,
+  // And the ceramic takes little of what does reach it. It is the darkest
+  // material on the page and it is meant to stay that way: what the light gives
+  // it is an edge along a fold and a wash in a cavity, not a colour. White
+  // carries further on a dark surface than a single channel does — every
+  // channel it lands in is one the eye reads as brightness — so it takes rather
+  // less of it than red did.
+  reach: 0.22,
+  // The glass takes the least of all. What it does with the light is not a
+  // surface catching it but a screen laid over everything behind the face —
+  // the shape included — so a share written as though the glass were a wall
+  // washes out the tesseract itself and undoes the work above.
+  glassReach: 0.12,
+  // And the ball of light itself is kept low, because what it adds it adds over
+  // the far side of the body as well as over the gaps. Most of what should be
+  // seen of the lamp is the light it puts on the ceramic, not the lamp.
+  centre: 0.3,
+  bloom: 0.025,
+  pulse: [0.1, 0.62],
+  escape: [0.2, 0.88],
+} satisfies HeroCoreLight;
 export const HERO_FRACTAL_GLASS = {
   fractalScale: 0.72,
   orbScale: 0.6,

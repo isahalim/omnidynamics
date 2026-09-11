@@ -13,18 +13,21 @@
  * the example's optics trace, and the pyramid's model matrix carries the two
  * together into the world the wall lives in.
  */
-import type { Draw, Gpu, Target } from "vgpu";
+import type { Draw, Geometry, Gpu, Target } from "vgpu";
 import { draw } from "vgpu";
 
+import heroFractalCoreWgsl from "../glass/hero-fractal-core.wgsl";
 import heroFractalMeshWgsl from "../glass/hero-fractal-mesh.wgsl";
 import { decodeMesh } from "../glass/hero-glass-assets-core";
 import {
+  HERO_CORE_LIGHT,
   HERO_FRACTAL_GLASS,
   HERO_FRACTAL_MATERIAL,
   HERO_GLOW_MATERIAL,
   HERO_ORB_MATERIAL,
   type HeroFractalMaterial,
 } from "../glass/settings";
+import { sphereGeometry } from "./geometry";
 import { PYRAMID_MODEL, pyramidInteriorScale } from "./pyramid";
 import { IDENTITY_4, multiply4, spinModelMatrix } from "./matrix";
 import { PART_SLOTS, rigFor, type Rig } from "./rig";
@@ -33,6 +36,14 @@ import { BASE, withBase } from "../base";
 
 const FRACTAL_MESH_URL = `${BASE}/glass/fractal-tetrahedron-l7.mesh`;
 const MORPH_DURATION_MS = 1040;
+
+/** No lamp: what every shape but the tesseract hands the shaders that read one. */
+const NO_CORE = {
+  position: [0, 0, 0] as Vec3,
+  color: HERO_GLOW_MATERIAL.color,
+  strength: 0,
+  range: 1,
+};
 
 /**
  * How far a model turns to follow the cursor when it has no rig of its own, in
@@ -75,6 +86,8 @@ interface InteriorEntry {
    * its own sphere target lies on. See `hero-fractal-face-instance.wgsl`.
    */
   readonly wholeMesh: number;
+  /** True for the one shape with a lamp standing at its centre. */
+  readonly lit: boolean;
 }
 
 export interface InteriorFrame {
@@ -85,10 +98,27 @@ export interface InteriorFrame {
   readonly pointer: readonly [number, number];
 }
 
+/**
+ * The lamp inside the shape as the glass around it sees it, in the world the
+ * wall lives in — its own reach and its own falloff, not the ceramic's.
+ */
+export interface InteriorCoreLight {
+  readonly position: Vec3;
+  readonly color: readonly [number, number, number];
+  readonly strength: number;
+  readonly range: number;
+}
+
 export interface PrismInterior {
   /** True while the morph or the orb's own wobble still needs frames. */
   needsFrame(): boolean;
   bind(frame: InteriorFrame): void;
+  /**
+   * Where the lamp inside the shape stands this frame, for the glass around it
+   * to catch — at no strength when what is in the glass has none. Read after
+   * `bind`, which is what works it out.
+   */
+  coreLight(): InteriorCoreLight;
   /** What to draw this frame, back to front. */
   draws(): readonly Draw[];
   /** Advances the morph and the orb clock. */
@@ -122,6 +152,10 @@ export async function createPrismInterior(
    * what shows through a slit is the orb rather than the plaster.
    */
   let orbDraw: Draw | undefined;
+  /** The lamp at the centre of the tesseract. See `hero-fractal-core.wgsl`. */
+  let coreGeometry: Geometry | undefined;
+  let coreDraw: Draw | undefined;
+  let core: InteriorCoreLight = NO_CORE;
 
   const register = async (id: PrismInteriorId, url: string) => {
     const response = await fetch(url, { signal });
@@ -173,7 +207,31 @@ export async function createPrismInterior(
       spins: !isFractal,
       rig,
       wholeMesh: isFractal ? 0 : 1,
+      lit: id === "chronovoxel",
     });
+    if (id === "chronovoxel" && !coreDraw) await registerCore();
+  };
+
+  /**
+   * The lamp, built once the shape that holds it arrives.
+   *
+   * It is light rather than a thing: added over what is already drawn, and
+   * leaving the depth buffer as it found it, so the shells go on occluding one
+   * another through it. It is depth-tested all the same — a shell standing in
+   * front of the light hides the light, which is what makes the gaps between
+   * the shells the only way it gets out.
+   */
+  const registerCore = async () => {
+    coreGeometry = sphereGeometry(gpu, "prism.hero.interior-core");
+    coreDraw = draw(gpu, {
+      shader: heroFractalCoreWgsl,
+      geometry: coreGeometry,
+      cull: "back",
+      blend: "additive",
+      depth: { write: false },
+      label: "prism.hero.interior-core",
+    });
+    await coreDraw.compile(target);
   };
 
   await register("fractal", FRACTAL_MESH_URL);
@@ -221,6 +279,17 @@ export async function createPrismInterior(
     return t * t * (3 - 2 * t);
   };
 
+  /**
+   * The breath in the lamp's brightness.
+   *
+   * A light that is exactly as bright from one second to the next is a light
+   * that was switched on; this is a tenth either way on a slow beat, which is
+   * under the threshold at which you would call it flashing and over the one at
+   * which the thing stops looking alive.
+   */
+  const corePulse = () =>
+    1 + Math.sin(rigTime * HERO_CORE_LIGHT.pulse[1]) * HERO_CORE_LIGHT.pulse[0];
+
   const bind = (frame: InteriorFrame) => {
     const active = entry();
     const scale = active.scale * (1 - sphereMix) + HERO_FRACTAL_GLASS.orbScale * sphereMix;
@@ -255,6 +324,39 @@ export async function createPrismInterior(
       )
     );
     const material = blendMaterial(HERO_FRACTAL_MATERIAL, HERO_ORB_MATERIAL, sphereMix);
+    // The shape is centred on its own bounds, so the lamp inside it stands at
+    // the model matrix's own translation — the shape's centre, carried through
+    // the lean, the drift and the pyramid in one. The scale it was carried
+    // there by is the length of any of the matrix's axes, which is what turns
+    // the lamp's own numbers, written in the mesh's units, into the world the
+    // wall lives in.
+    const worldScale = Math.hypot(model[0]!, model[1]!, model[2]!);
+    // Two things put it out, and both have to.
+    //
+    // The first is the body it is inside. Shut, the tesseract is a solid box
+    // and a box does not leak: not a trace of the light reaches the ceramic,
+    // the glass or the air between them, and what stands in the pyramid is
+    // black. As the clip turns the shells off one another the light gets out
+    // through what has opened, slowly at first — `escape` is how far they have
+    // to stand open before any of it does, and how far before all of it does.
+    //
+    // The second is the morph, which takes the shape to an orb that has no
+    // inside to hold anything: the ball of light shrinks into the middle as its
+    // own brightness goes down with it, so what leaves last is a glow rather
+    // than a sphere that pops.
+    const opened = pose
+      ? smoothStep(HERO_CORE_LIGHT.escape[0], HERO_CORE_LIGHT.escape[1], pose.openness)
+      : 1;
+    const lit = active.lit ? (1 - sphereMix) * opened : 0;
+    const shining = HERO_GLOW_MATERIAL.strength * corePulse() * lit;
+    core = lit > 0
+      ? {
+          position: [model[12]!, model[13]!, model[14]!],
+          color: HERO_GLOW_MATERIAL.color,
+          strength: shining * HERO_CORE_LIGHT.glassReach,
+          range: HERO_CORE_LIGHT.glassRange * worldScale,
+        }
+      : NO_CORE;
     active.draw.set({
       params: {
         viewProjection: frame.viewProjection,
@@ -266,9 +368,14 @@ export async function createPrismInterior(
         wholeMesh: active.wholeMesh,
         time: orbTime,
         material,
-        // Only a vertex the mesh tagged reads this, so every shape is handed
-        // the same glow and all but the tesseract ignore it.
-        glow: HERO_GLOW_MATERIAL,
+        // How hard the lamp lights the ceramic, and how far it carries there,
+        // are both different questions from the same two asked of the glass —
+        // so the shells are handed their own light rather than the glass's.
+        core: {
+          ...core,
+          strength: shining * HERO_CORE_LIGHT.reach,
+          range: HERO_CORE_LIGHT.range * worldScale,
+        },
         environmentRotation: frame.environmentRotation,
         environmentExposure: HERO_FRACTAL_GLASS.environmentExposure,
         parts: pose ? pose.parts : REST_PARTS,
@@ -294,13 +401,48 @@ export async function createPrismInterior(
           wholeMesh: 0,
           time: orbTime,
           material,
-          glow: HERO_GLOW_MATERIAL,
+          core: NO_CORE,
           environmentRotation: frame.environmentRotation,
           environmentExposure: HERO_FRACTAL_GLASS.environmentExposure,
           parts: REST_PARTS,
         },
         environmentTexture: environment,
         environmentSampler,
+      });
+    }
+
+    if (lit > 0 && coreDraw) {
+      // The ball of light travels with the shape — the same lean, the same
+      // drift — so it stays at the centre of the shells rather than sliding
+      // about inside them. It is a sphere, so it takes the transform for the
+      // ride and none of the turn shows.
+      const breath = corePulse() * lit;
+      coreDraw.set({
+        params: {
+          viewProjection: frame.viewProjection,
+          model: multiply4(
+            PYRAMID_MODEL,
+            spinModelMatrix(
+              scale * HERO_CORE_LIGHT.radius,
+              pose
+                ? [
+                    offset[0] + pose.drift[0] * scale,
+                    offset[1] + pose.drift[1] * scale,
+                    offset[2] + pose.drift[2] * scale,
+                  ]
+                : offset,
+              0,
+              0
+            )
+          ),
+          cameraPosition: frame.cameraPosition,
+          color: core.color,
+          // The glow is added over the image rather than tone mapped into it,
+          // so both of these are in the range the image is already in: they are
+          // the light it lays on, not an intensity to be mapped.
+          centre: HERO_CORE_LIGHT.centre * breath,
+          bloom: HERO_CORE_LIGHT.bloom * breath,
+        },
       });
     }
   };
@@ -356,16 +498,27 @@ export async function createPrismInterior(
   return {
     // A rig that moves on its own — a turning propeller, a hovering drone —
     // needs frames even when nothing has been touched and nothing is morphing.
-    needsFrame: () => morphing || sphereMix > 0 || (entry().rig?.animated ?? false),
+    // So does a lamp that breathes.
+    needsFrame: () =>
+      morphing || sphereMix > 0 || entry().lit || (entry().rig?.animated ?? false),
     bind,
-    draws: () =>
-      fillAmount() > 0 && orbDraw ? [orbDraw, entry().draw] : [entry().draw],
+    coreLight: () => core,
+    draws: () => {
+      const list: Draw[] = [];
+      if (fillAmount() > 0 && orbDraw) list.push(orbDraw);
+      list.push(entry().draw);
+      // The glow goes over the shells rather than among them: it is light in
+      // the air, and the depth they wrote is what decides which of it gets out.
+      if (core.strength > 0 && coreDraw) list.push(coreDraw);
+      return list;
+    },
     tick,
     setState,
     dispose() {
       if (disposed) return;
       disposed = true;
       for (const mesh of meshes) mesh.destroy?.();
+      (coreGeometry as { destroy?: () => void } | undefined)?.destroy?.();
     },
   };
 }
@@ -394,6 +547,12 @@ function fitScale(
     ],
     centre
   );
+}
+
+/** The same ease the morph and the orb fill are shaped with. */
+function smoothStep(edge0: number, edge1: number, value: number): number {
+  const t = Math.min(1, Math.max(0, (value - edge0) / (edge1 - edge0 || 1)));
+  return t * t * (3 - 2 * t);
 }
 
 function blendMaterial(

@@ -48,7 +48,12 @@ import {
   viewportWithinCanvas,
   type ProjectionFraming,
 } from "./framing";
-import { createPrismInterior, type PrismInterior, type PrismInteriorId } from "./interior";
+import {
+  createPrismInterior,
+  type InteriorCoreLight,
+  type PrismInterior,
+  type PrismInteriorId,
+} from "./interior";
 import { followPointer } from "./pointer";
 import {
   PYRAMID_MODEL,
@@ -69,6 +74,14 @@ const CAMERA_ORIENTATION: CameraOrientation = {
 const CAMERA_FOV = PYRAMID_CAMERA.fov;
 /** Far enough back that the fit always has room to search inward. */
 const DEFAULT_DISTANCE = 2.4;
+
+/** What the glass is handed before there is a platform in it to light it. */
+const NO_CORE: InteriorCoreLight = {
+  position: [0, 0, 0],
+  color: [0, 0, 0],
+  strength: 0,
+  range: 1,
+};
 
 /**
  * The example rotates its studio by negative degrees; `rotationMatrix` takes
@@ -201,7 +214,20 @@ export function createHeroRenderer(options: HeroRendererOptions): HeroRenderer {
       },
     });
 
-    // vgpu's own glass controls, unchanged: this is its material.
+    // The platform is bound first because the glass has to know where the lamp
+    // inside it is standing before it can catch its light, and where that is
+    // depends on where the shape has drifted to this frame. What comes back is
+    // the lamp as the glass sees it, which is not what the shells see.
+    interior?.bind({
+      viewProjection,
+      cameraPosition: view.position,
+      environmentRotation: ENVIRONMENT_ROTATION,
+      pointer: orbit,
+    });
+    const core = interior?.coreLight() ?? NO_CORE;
+
+    // vgpu's own glass controls, unchanged but for the lamp: this is its
+    // material.
     const glassParams = {
       viewProjection,
       model: PYRAMID_MODEL,
@@ -222,6 +248,7 @@ export function createHeroRenderer(options: HeroRendererOptions): HeroRenderer {
       environmentRotation: ENVIRONMENT_ROTATION,
       environmentExposure: HERO_FRACTAL_GLASS.environmentExposure,
       reflectionDebug: 0,
+      core,
     };
     draws.glassBack.set({
       params: glassParams,
@@ -236,12 +263,6 @@ export function createHeroRenderer(options: HeroRendererOptions): HeroRenderer {
       sceneSampler,
     });
     draws.present.set({ sceneTexture: backdrop });
-    interior?.bind({
-      viewProjection,
-      cameraPosition: view.position,
-      environmentRotation: ENVIRONMENT_ROTATION,
-      pointer: orbit,
-    });
   };
 
   const render = () => {

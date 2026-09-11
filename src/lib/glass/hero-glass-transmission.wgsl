@@ -4,6 +4,11 @@ import {
   rotateHeroEnvironmentDirection,
   sampleHeroEnvironment,
 } from "./hero-glass-environment.wgsl";
+import {
+  HeroCoreLight,
+  heroCoreDirection,
+  heroCoreFalloff,
+} from "./hero-core-light.wgsl";
 
 // The planar regions of the rounded mesh lie exactly on these four planes.
 // Beveled pixels begin slightly inside the same convex hull, so intersecting
@@ -49,6 +54,8 @@ struct GlassParams {
   environmentRotation: mat4x4f,
   environmentExposure: f32,
   reflectionDebug: f32,
+  /** The lamp standing inside the solid, at no strength when there is none. */
+  core: HeroCoreLight,
 }
 @group(0) @binding(0) var<uniform> params: GlassParams;
 @group(0) @binding(1) var environmentTexture: texture_2d_array<f32>;
@@ -312,10 +319,33 @@ fn sampleInterior(uv: vec2f, halfTexel: vec2f) -> vec3f {
     vec3f(1.0),
   );
 
+  // The lamp inside is already in the transmission — it was drawn into the
+  // image this face refracts — but only as the shape of it seen through the
+  // shells. This is the other half: the light arriving on the inside of the
+  // face itself and leaving through it, which is what puts the core's light in
+  // the glass between the shape and its edge rather than only where the core
+  // shows through. It is what the face catches, less the share of it the interface
+  // turns back inside, and it is screened in beside the caustic rather than
+  // tinted into the transmission, because it is light on the glass and not
+  // something the glass is being looked through at.
+  let coreIncidence = clamp(
+    -dot(normal, heroCoreDirection(params.core, in.worldPosition)),
+    0.0,
+    1.0,
+  );
+  let coreHighlight = clamp(
+    params.core.color * params.core.strength *
+      heroCoreFalloff(params.core, in.worldPosition) *
+      coreIncidence * (1.0 - fresnel),
+    vec3f(0.0),
+    vec3f(1.0),
+  );
+
   let finalGlass = 1.0 - (
     (1.0 - clamp(physicalGlass, vec3f(0.0), vec3f(1.0)))
     * (1.0 - studioPanelHighlight)
     * (1.0 - faceCausticHighlight)
+    * (1.0 - coreHighlight)
   );
   return vec4f(finalGlass, 1.0);
 }

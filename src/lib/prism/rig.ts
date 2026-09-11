@@ -114,6 +114,15 @@ interface RigSpec {
    * of it, which is how a clip and a cursor can both have their say.
    */
   readonly clip?: string;
+  /**
+   * Seconds it holds the clip's first pose before playing it, each time round.
+   *
+   * A clip that opens and shuts and is played back to back is a thing that is
+   * always in the middle of doing something. The pause is what makes the open
+   * an event: the tesseract stands there as a shut black cube long enough for
+   * that to be what it is, and then it comes apart.
+   */
+  readonly clipHold?: number;
   readonly joints: readonly Joint[];
 }
 
@@ -160,17 +169,25 @@ const RIGS: Readonly<Record<string, RigSpec>> = {
     ],
   },
   chronovoxel: {
-    // Nine shells folding through one another is all the motion the shape
-    // needs, so nothing is laid over it but the drift of a thing with nothing
-    // holding it still, and the lean it takes toward the cursor.
+    // Nine shells folding through one another is most of the motion the shape
+    // needs, so little is laid over it: the drift of a thing with nothing
+    // holding it still, the lean it takes toward the cursor, and one slow turn
+    // about its own axis. That turn takes three quarters of a minute to come
+    // round, which is slow enough that at any moment it reads as the shells
+    // moving rather than as a turntable, and long enough that a face you were
+    // looking at is somewhere else when you look back.
     body: {
       yaw: 0.4,
       pitch: 0.16,
       roll: 0.08,
+      spin: 0.085,
       bob: [0.035, 0.5],
       sway: [0.018, 0.33],
     },
     clip: "chronovoxel",
+    // Its own curve runs a little over ten seconds, and it spends four of them
+    // shut before it starts.
+    clipHold: 4,
     joints: [],
   },
   manipulator: {
@@ -256,6 +273,18 @@ export interface RigPose {
   readonly roll: number;
   /** Added to where the shape stands, in mesh units. */
   readonly drift: Vec3;
+  /**
+   * How far open the subject stands, 0 when it is shut and 1 at the widest its
+   * own clip takes it — and 1 throughout for a subject that is not a body with
+   * an inside, which is every one of them but the tesseract.
+   *
+   * It is the mean angle its clip has turned the shells through, against the
+   * widest that mean reaches over the clip. A body of nested shells is light-
+   * tight when they are all square with one another and leaks everywhere once
+   * they are not, and the angle between them is the whole of that: nothing else
+   * in the clip decides whether the thing is open.
+   */
+  readonly openness: number;
 }
 
 export interface Rig {
@@ -337,9 +366,15 @@ export function rigFor(id: string, reduceMotion: boolean): Rig | undefined {
   // is opened up to match rather than adding samples without end, since a
   // motion that takes a minute needs no finer walking than one that takes four
   // seconds.
+  // What the clip actually comes round on: its own length, plus the pause it
+  // spends at its first pose before playing. Everything that walks the clock —
+  // the fit sweep below, and the phase the pose is read at — works in this
+  // rather than in the curve's own duration.
+  const clipCycle = clip ? clip.duration + (spec.clipHold ?? 0) : 0;
+
   const span = Math.max(
     CLOCK_SAMPLES_MIN * CLOCK_STEP,
-    clip?.duration ?? 0,
+    clipCycle,
     ...joints.map(({ joint }) => joint.episode?.[1] ?? 0),
     ...[
       spec.body.spin,
@@ -351,6 +386,16 @@ export function rigFor(id: string, reduceMotion: boolean): Rig | undefined {
   const clockSamples = Math.min(CLOCK_SAMPLES_MAX, Math.ceil(span / CLOCK_STEP));
   const clockStep = span / clockSamples;
 
+  // The widest the clip's own parts ever stand from where they were baked, on
+  // average, and the moment they stand there. The first is what `openness` on
+  // the pose is measured against; the second is where a reduced-motion setting
+  // holds the curve. Both are taken off the curve rather than written down, so
+  // a clip that is re-thinned or replaced still reads as fully open at its own
+  // widest rather than at a number that was true of the one before it.
+  const widest = played.length > 0
+    ? widestMeanTurn(played, clip!.duration)
+    : { turn: 0, at: 0 };
+
   const rig: Rig = {
     animated,
     fitScale: (centre) => poseFitScale(parts, rig.pose, centre, clockSamples, clockStep),
@@ -360,10 +405,25 @@ export function rigFor(id: string, reduceMotion: boolean): Rig | undefined {
       // The scene's own curve first, so a joint written below still has the
       // last word over the part it shares with it. Both are faded out by the
       // morph, which is what leaves every shape the same sphere at the orb.
+      let turned = 0;
       if (clip) {
-        const phase = reduceMotion ? 0 : ((time % clip.duration) + clip.duration) % clip.duration;
+        // Reduced motion takes away movement, not the pose the subject is in —
+        // and the pose a body of shells is in is the whole of what it is. Held
+        // at the clip's first key the tesseract is a shut box with nothing to
+        // see, so it is held at its widest instead: open, still, and lit.
+        //
+        // Otherwise the cycle is the pause and then the curve: everything
+        // before `clipHold` is the clip's own first pose, held.
+        const cycle = ((time % clipCycle) + clipCycle) % clipCycle;
+        const phase = reduceMotion
+          ? widest.at
+          : Math.max(0, cycle - (spec.clipHold ?? 0));
         for (const { track, index } of played) {
           const key = keyAt(track, phase);
+          // How far this part has been turned from where it was baked. The
+          // clip's first key is the shut body, so this is 0 there and widest
+          // halfway through — see `openness` on the pose.
+          turned += 2 * Math.acos(Math.min(1, Math.abs(key.turn[3])));
           local[index] = similarityAbout(
             slerp(IDENTITY_QUATERNION, key.turn, amount),
             1 + (key.scale - 1) * amount,
@@ -397,6 +457,10 @@ export function rigFor(id: string, reduceMotion: boolean): Rig | undefined {
       const sway = spec.body.sway;
       return {
         parts: posed.slice(0, PART_SLOTS),
+        openness:
+          played.length > 0 && widest.turn > 0
+            ? Math.min(1, turned / played.length / widest.turn)
+            : 1,
         yaw: (-pointer[0] * spec.body.yaw + (spec.body.spin ?? 0) * clock) * amount,
         pitch: -pointer[1] * spec.body.pitch * amount,
         roll: pointer[0] * spec.body.roll * amount,
@@ -409,6 +473,31 @@ export function rigFor(id: string, reduceMotion: boolean): Rig | undefined {
     },
   };
   return rig;
+}
+
+/**
+ * The widest the clip ever turns its parts, as a mean over them, and when.
+ *
+ * Walked at a fixed step rather than solved: the curve is a few dozen keys per
+ * part and this runs once, when the rig is built.
+ */
+function widestMeanTurn(
+  played: readonly { track: ClipTrack; index: number }[],
+  duration: number
+): { turn: number; at: number } {
+  const steps = 128;
+  let widest = { turn: 0, at: 0 };
+  for (let step = 0; step <= steps; step++) {
+    const at = (duration * step) / steps;
+    let turned = 0;
+    for (const { track } of played) {
+      const key = keyAt(track, at);
+      turned += 2 * Math.acos(Math.min(1, Math.abs(key.turn[3])));
+    }
+    const turn = turned / played.length;
+    if (turn > widest.turn) widest = { turn, at };
+  }
+  return widest;
 }
 
 function axisOf(part: RigPart, axis: "x" | "y" | "z"): Vec3 {

@@ -519,3 +519,100 @@ function polygonCentroid(polygon: Vec2[]): Vec2 {
   const scale = 3 * area;
   return [x / scale, y / scale];
 }
+
+/** A point on the sphere below, as against the `Vec2` the prism is built from. */
+type SpherePoint = [number, number, number];
+
+/**
+ * A unit sphere, for the lamp inside the tesseract.
+ *
+ * An icosahedron subdivided twice and pushed out onto the sphere: 320 faces,
+ * which on a shape a seventh of the platform across is past the point where
+ * another level would show. Every other geometry here is built from the prism's
+ * own cross-section; this is the one shape in the scene that is simply a
+ * sphere, so it is built the way a sphere is rather than swept from a profile.
+ *
+ * Position and normal are the same vector on a unit sphere. Both are written
+ * anyway, in the layout the rest of the scene's shaders read, so the shader is
+ * an ordinary one rather than a special case.
+ */
+export function sphereGeometry(gpu: Gpu, label: string): Geometry {
+  const { vertices, indices } = sphereMeshData(2);
+  return geometry(gpu, {
+    label,
+    buffers: [
+      {
+        data: vertices,
+        stride: 24,
+        attributes: { position: "float32x3", normal: "float32x3" },
+      },
+    ],
+    indices,
+  });
+}
+
+function sphereMeshData(subdivisions: number): {
+  vertices: Float32Array;
+  indices: Uint16Array;
+} {
+  // The icosahedron's twelve vertices, as three golden rectangles at right
+  // angles to one another.
+  const phi = (1 + Math.sqrt(5)) / 2;
+  let points: SpherePoint[] = [
+    [-1, phi, 0], [1, phi, 0], [-1, -phi, 0], [1, -phi, 0],
+    [0, -1, phi], [0, 1, phi], [0, -1, -phi], [0, 1, -phi],
+    [phi, 0, -1], [phi, 0, 1], [-phi, 0, -1], [-phi, 0, 1],
+  ].map((point) => unit(point as SpherePoint));
+  let faces: [number, number, number][] = [
+    [0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7, 10], [0, 10, 11],
+    [1, 5, 9], [5, 11, 4], [11, 10, 2], [10, 7, 6], [7, 1, 8],
+    [3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9],
+    [4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1],
+  ];
+
+  for (let pass = 0; pass < subdivisions; pass++) {
+    // One vertex per edge, shared by the two faces either side of it, so the
+    // surface stays welded rather than splitting into loose triangles.
+    const middles = new Map<string, number>();
+    const middle = (a: number, b: number): number => {
+      const key = a < b ? `${a}:${b}` : `${b}:${a}`;
+      const found = middles.get(key);
+      if (found !== undefined) return found;
+      const first = points[a]!;
+      const second = points[b]!;
+      const index = points.length;
+      points.push(
+        unit([
+          first[0] + second[0],
+          first[1] + second[1],
+          first[2] + second[2],
+        ])
+      );
+      middles.set(key, index);
+      return index;
+    };
+    faces = faces.flatMap(([a, b, c]) => {
+      const ab = middle(a, b);
+      const bc = middle(b, c);
+      const ca = middle(c, a);
+      return [
+        [a, ab, ca],
+        [b, bc, ab],
+        [c, ca, bc],
+        [ab, bc, ca],
+      ] as [number, number, number][];
+    });
+  }
+
+  const vertices = new Float32Array(points.length * 6);
+  points.forEach((point, index) => {
+    vertices.set(point, index * 6);
+    vertices.set(point, index * 6 + 3);
+  });
+  return { vertices, indices: new Uint16Array(faces.flat()) };
+}
+
+function unit([x, y, z]: SpherePoint): SpherePoint {
+  const length = Math.hypot(x, y, z) || 1;
+  return [x / length, y / length, z / length];
+}

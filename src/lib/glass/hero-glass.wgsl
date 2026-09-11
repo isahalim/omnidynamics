@@ -4,6 +4,11 @@ import {
   rotateHeroEnvironmentDirection,
   sampleHeroEnvironment,
 } from "./hero-glass-environment.wgsl";
+import {
+  HeroCoreLight,
+  heroCoreDirection,
+  heroCoreFalloff,
+} from "./hero-core-light.wgsl";
 
 struct GlassParams {
   viewProjection: mat4x4f,
@@ -24,6 +29,8 @@ struct GlassParams {
   environmentRotation: mat4x4f,
   environmentExposure: f32,
   reflectionDebug: f32,
+  /** The lamp standing inside the solid, at no strength when there is none. */
+  core: HeroCoreLight,
 }
 @group(0) @binding(0) var<uniform> params: GlassParams;
 @group(0) @binding(1) var environmentTexture: texture_2d_array<f32>;
@@ -87,7 +94,20 @@ fn premultiplied(color: vec3f, alpha: f32) -> vec4f {
   // not the one flipped toward the camera: flipped, every back face would be
   // assigned to the face opposite it and carry that face's pattern.
   let faceCaustic = heroGlassFaceCaustic(in.localPosition, in.localNormal);
+  // And what the lamp inside the solid throws on the far shell, which the front
+  // interface reads back through the glass. The incidence is taken against the
+  // outward normal rather than the one flipped toward the camera: light from
+  // inside arrives on the inner side of the face, so the angle it arrives at is
+  // the one the outward normal states, back to front.
+  let coreIncidence = clamp(
+    -dot(rawNormal, heroCoreDirection(params.core, in.worldPosition)),
+    0.0,
+    1.0,
+  );
+  let coreLit = params.core.color * params.core.strength *
+    heroCoreFalloff(params.core, in.worldPosition) * coreIncidence;
   let lit = presentCeramic(reflected).rgb +
-    FACE_CAUSTIC_TINT * faceCaustic * FACE_CAUSTIC_STRENGTH;
+    FACE_CAUSTIC_TINT * faceCaustic * FACE_CAUSTIC_STRENGTH +
+    coreLit;
   return premultiplied(clamp(lit, vec3f(0.0), vec3f(1.0)), alpha);
 }
