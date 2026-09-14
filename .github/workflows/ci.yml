@@ -31,18 +31,14 @@ jobs:
         run: npx --no -- vgpu install-software-renderer
 
       # Repository *variables*, not secrets, and deliberately so: every one of
-      # these is compiled into the bundle and served to readers. A public OAuth
-      # client has no secret to keep — that is what PKCE is for — and a booking
-      # link is a URL. Unset, the site still builds: the sign-in and the booking
-      # page say they are not connected rather than failing at a redirect.
+      # these is compiled into the bundle and served to readers. A Google OAuth
+      # client id is an identifier, not a credential, and a booking link is a
+      # URL. Unset, the site still builds: the sign-in and the booking page say
+      # they are not connected rather than failing at the first click.
       # See `.env.example`.
       - name: Build
         env:
-          PUBLIC_OIDC_ISSUER: ${{ vars.PUBLIC_OIDC_ISSUER }}
-          PUBLIC_OIDC_CLIENT_ID: ${{ vars.PUBLIC_OIDC_CLIENT_ID }}
-          PUBLIC_OIDC_SCOPE: ${{ vars.PUBLIC_OIDC_SCOPE }}
-          PUBLIC_OIDC_FLOW_GOOGLE: ${{ vars.PUBLIC_OIDC_FLOW_GOOGLE }}
-          PUBLIC_OIDC_FLOW_SSO: ${{ vars.PUBLIC_OIDC_FLOW_SSO }}
+          PUBLIC_GOOGLE_CLIENT_ID: ${{ vars.PUBLIC_GOOGLE_CLIENT_ID }}
           PUBLIC_CAL_LINK: ${{ vars.PUBLIC_CAL_LINK }}
           PUBLIC_CAL_ORIGIN: ${{ vars.PUBLIC_CAL_ORIGIN }}
         run: npm run build
@@ -79,18 +75,14 @@ jobs:
         run: npx --no -- vgpu install-software-renderer
 
       # Repository *variables*, not secrets, and deliberately so: every one of
-      # these is compiled into the bundle and served to readers. A public OAuth
-      # client has no secret to keep — that is what PKCE is for — and a booking
-      # link is a URL. Unset, the site still builds: the sign-in and the booking
-      # page say they are not connected rather than failing at a redirect.
+      # these is compiled into the bundle and served to readers. A Google OAuth
+      # client id is an identifier, not a credential, and a booking link is a
+      # URL. Unset, the site still builds: the sign-in and the booking page say
+      # they are not connected rather than failing at the first click.
       # See `.env.example`.
       - name: Build
         env:
-          PUBLIC_OIDC_ISSUER: ${{ vars.PUBLIC_OIDC_ISSUER }}
-          PUBLIC_OIDC_CLIENT_ID: ${{ vars.PUBLIC_OIDC_CLIENT_ID }}
-          PUBLIC_OIDC_SCOPE: ${{ vars.PUBLIC_OIDC_SCOPE }}
-          PUBLIC_OIDC_FLOW_GOOGLE: ${{ vars.PUBLIC_OIDC_FLOW_GOOGLE }}
-          PUBLIC_OIDC_FLOW_SSO: ${{ vars.PUBLIC_OIDC_FLOW_SSO }}
+          PUBLIC_GOOGLE_CLIENT_ID: ${{ vars.PUBLIC_GOOGLE_CLIENT_ID }}
           PUBLIC_CAL_LINK: ${{ vars.PUBLIC_CAL_LINK }}
           PUBLIC_CAL_ORIGIN: ${{ vars.PUBLIC_CAL_ORIGIN }}
         run: npm run build

@@ -5,13 +5,13 @@
  * is cut from — so the header reads as a single control rather than two links
  * that happen to be next to each other.
  *
- * "Sign in" is a plain link to a page, not a button that does something on
- * click: the flow it starts is a full-page redirect to another origin, and a
- * link is the honest shape for that. It is swapped for the person's own name
+ * "Sign in" is a plain link to a page, not the sign-in itself: the control that
+ * signs a person in is Google's, it belongs on a page of its own, and a link is
+ * the honest shape for the way there. It is swapped for the person's own name
  * once the session is picked up, which happens after paint and must not move
  * anything around it when it does.
  */
-import { OIDC_READY, ROUTES } from "../lib/auth/config";
+import { SIGN_IN_READY, ROUTES } from "../lib/auth/config";
 
 interface Props {
   /** Where to come back to after signing in. Defaults to the current page. */
@@ -22,7 +22,7 @@ const backTo = returnTo ?? Astro.url.pathname;
 ---
 
 <div class="actions">
-  {OIDC_READY && (
+  {SIGN_IN_READY && (
     <>
       <a class="ghost clicky" href={`${ROUTES.signIn}?next=${encodeURIComponent(backTo)}`} data-signin>
         Sign in
@@ -127,13 +127,13 @@ const backTo = returnTo ?? Astro.url.pathname;
 </style>
 
 <script>
-  import { OIDC_READY } from "../lib/auth/config";
+  import { SIGN_IN_READY } from "../lib/auth/config";
 
-  // This component is in the header of every page, and the protocol client is
-  // the largest thing the site would otherwise download. Asked for here rather
-  // than imported at the top, it is fetched only on a build that has a provider
-  // — and even then, after the page the reader came for.
-  if (OIDC_READY) {
+  // This component is in the header of every page, and Google's library is the
+  // largest thing the site would otherwise download. Asked for here rather
+  // than imported at the top, it is fetched only on a build where signing in is
+  // possible — and even then, after the page the reader came for.
+  if (SIGN_IN_READY) {
     const { observe, restore } = await import("../lib/auth/session");
     const signIn = document.querySelector<HTMLElement>("[data-signin]");
     const account = document.querySelector<HTMLElement>("[data-account]");
@@ -145,7 +145,7 @@ const backTo = returnTo ?? Astro.url.pathname;
         account.hidden = who === null;
         name.textContent = who?.name ?? "";
       });
-      // Asks the provider whether this browser still has a session. Nothing
+      // Checks whether this tab is holding a valid identity token. Nothing
       // waits on it: the header is already correct for a signed-out reader.
       void restore();
     }

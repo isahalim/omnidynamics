@@ -3,36 +3,51 @@
  *
  * ## The protocol
  *
- * Authorization code with PKCE, and nothing else. OAuth 2.1 removes the implicit
- * flow and the password grant and makes PKCE mandatory for every client, which
- * is exactly right for a site like this one: it is static files, so it cannot
- * keep a client secret, and the code verifier is the thing that proves the
- * browser that finishes the exchange is the browser that started it. The
- * protocol work is `oidc-client-ts` (Apache-2.0), a certified OpenID relying
- * party — it does discovery, S256 challenges, `state`, `nonce`, and id token
- * signature/issuer/audience/expiry validation. None of that is reimplemented
- * here, because a hand-rolled OAuth client is how sites get broken into.
+ * OpenID Connect, and only the identity half of it. Google Identity Services
+ * hands the page a single artefact — an **id token**: a JWT that Google has
+ * signed, saying who this person is, which site they signed in to, and when the
+ * statement expires. There is no access token, no refresh token, no scope
+ * beyond the name and address in the token itself, and nothing that can be
+ * exchanged for access to anything at Google. The site is told who you are and
+ * given no power to act as you, which is the whole of what it needs.
  *
- * OIDC is what answers *who is signing in*: OAuth 2.0 on its own delegates
- * access to an API and says nothing about identity, and reading a person's
- * identity out of an access token is a well-known way to authenticate the wrong
- * person. The id token is the identity claim, and it is validated as one.
+ * That shape is what lets this work with no server. The authorization code flow
+ * would be the stronger protocol, but completing it means calling Google's
+ * token endpoint with a client secret, and a site served as static files has
+ * nowhere to keep one — writing it into the bundle would simply publish it.
+ * Google's answer for a page in that position is this: no code, no exchange, no
+ * secret, just a signed assertion delivered to the browser.
  *
- * ## Where the tokens live
+ * ## Why the signature is checked here
  *
- * In memory, for the life of the tab, and nowhere else. Anything in
- * `localStorage` is readable by any script that ever manages to run on this
- * origin, and a stolen refresh token there outlives the theft; a token held in
- * a closure dies with the page. The cost is that a reload has no token, so the
- * session is restored by asking the provider — `prompt=none` in a hidden frame,
- * against the provider's own cookie, which is the copy of the session that is
- * allowed to be long-lived. The only things written to the tab's storage are
- * the PKCE verifier and `state` for the seconds a redirect is in flight, which
- * have to survive the navigation to be checked when it returns.
+ * A token nobody verifies is a string an attacker can write. There is no server
+ * to check it, so the check happens here: the signature against Google's
+ * published keys, the issuer, the audience, the nonce this page generated, and
+ * the expiry. {@link verify} does all five, and a token that fails any of them
+ * is discarded without a person being shown.
  *
- * (With a server in front of this site the better answer is a backend-for-
- * frontend holding the tokens in an `HttpOnly` cookie. There is no server here:
- * Cloudflare serves the built files and nothing else.)
+ * This is not a claim that the browser is trustworthy — code already running on
+ * this origin can do as it likes, and verification cannot change that. It is
+ * the guarantee that a credential arriving from *outside* this page, out of
+ * storage or another frame, is Google's and is for us. That is the threat this
+ * removes, and it is worth removing.
+ *
+ * ## Where the token lives
+ *
+ * In `sessionStorage`, for the life of the tab, and re-verified every time it
+ * is read back. Closing the tab discards it; a token that expires is dropped on
+ * the spot by a timer rather than left to be noticed later.
+ *
+ * The old version of this file kept tokens in a closure and refused storage
+ * entirely, because what it was holding was an OAuth *refresh* token — a
+ * long-lived credential that, stolen, outlives the theft and keeps working. An
+ * id token is not that. It cannot be redeemed for anything, it names this site
+ * as its only audience, and it is void within the hour. `sessionStorage` is the
+ * right home for it: per-tab, per-origin, and gone when the tab is.
+ *
+ * The cost is that it is per-*tab*. Opening a link in a new tab starts signed
+ * out, and the sign-in page offers Google's One Tap to pick the session back up
+ * in one click rather than a full sign-in.
  *
  * ## Separation
  *
@@ -41,38 +56,58 @@
  * second provider. Everything this site caches for a person is filed under that
  * pair by {@link scopedStorage}, and anything filed under a different one is
  * deleted the moment someone else signs in on the same browser. Authorization
- * is not done here at all: claims decide what the interface offers, and the API
- * that holds the data checks the access token itself. A UI that hides a button
+ * is not done here at all: claims decide what the interface offers, and any API
+ * that ever holds data must check the token itself. A UI that hides a button
  * has not protected anything.
  */
-import {
-  UserManager,
-  WebStorageStateStore,
-  type SigninRedirectArgs,
-  type StateStore,
-  type User,
-} from "oidc-client-ts";
-import { FLOWS, ISSUER_ORIGIN, OIDC, OIDC_READY, ROUTES, flowReady } from "./config";
+import { GOOGLE, GOOGLE_ISSUERS, SIGN_IN_READY } from "./config";
 
-/** The user store: a Map, so tokens exist only while the page does. */
-class MemoryStore implements StateStore {
-  private readonly cells = new Map<string, string>();
+/* ── What Google Identity Services gives us ───────────────────────────────── */
 
-  async set(key: string, value: string) {
-    this.cells.set(key, value);
-  }
-  async get(key: string) {
-    return this.cells.get(key) ?? null;
-  }
-  async remove(key: string) {
-    const had = this.cells.get(key) ?? null;
-    this.cells.delete(key);
-    return had;
-  }
-  async getAllKeys() {
-    return [...this.cells.keys()];
+interface CredentialResponse {
+  readonly credential: string;
+  readonly select_by?: string;
+}
+
+interface ButtonOptions {
+  type?: "standard" | "icon";
+  theme?: "outline" | "filled_blue" | "filled_black";
+  size?: "small" | "medium" | "large";
+  text?: "signin_with" | "signup_with" | "continue_with" | "signin";
+  shape?: "rectangular" | "pill" | "circle" | "square";
+  logo_alignment?: "left" | "center";
+  width?: number;
+  locale?: string;
+}
+
+interface GoogleIdentity {
+  initialize(config: {
+    client_id: string;
+    callback: (response: CredentialResponse) => void;
+    nonce?: string;
+    auto_select?: boolean;
+    cancel_on_tap_outside?: boolean;
+    context?: "signin" | "signup" | "use";
+    itp_support?: boolean;
+    use_fedcm_for_prompt?: boolean;
+  }): void;
+  renderButton(parent: HTMLElement, options: ButtonOptions): void;
+  prompt(listener?: (notification: unknown) => void): void;
+  disableAutoSelect(): void;
+}
+
+declare global {
+  interface Window {
+    google?: { accounts?: { id?: GoogleIdentity } };
   }
 }
+
+const GIS_SRC = "https://accounts.google.com/gsi/client";
+const JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs";
+
+/** Where the credential and the nonce it was issued against are kept. */
+const CREDENTIAL = "od.credential";
+const NONCE = "od.nonce";
 
 /** What a page is given about the person in front of it. */
 export interface Account {
@@ -84,145 +119,257 @@ export interface Account {
   readonly email: string;
   readonly emailVerified: boolean;
   readonly picture: string;
-  /** Tenant, where the provider issues one. Whose data this person is inside. */
+  /** The Workspace domain, where there is one. Whose organisation this is. */
   readonly organisation: string;
-  /** What the provider agreed to, which may be less than what was asked for. */
-  readonly scopes: readonly string[];
-  /** Seconds of access token left, for the account page to show honestly. */
+  /** Seconds of identity token left, for the account page to show honestly. */
   readonly expiresIn: number;
   /** Every claim held, so `/account/` can show the lot rather than a summary. */
   readonly claims: Readonly<Record<string, unknown>>;
 }
 
+/* ── Loading the library ──────────────────────────────────────────────────── */
+
+let loading: Promise<GoogleIdentity> | null = null;
+
 /**
- * The relying party, plus the one thing a federated button needs that the
- * library does not expose: the authorization URL *without* leaving for it.
+ * Fetches Google's script once and resolves with the interface it defines.
  *
- * "Continue with Google" cannot simply be this request with a parameter added —
- * authentik has no `kc_idp_hint`, so the detour past its login screen is a flow
- * that takes the authorization request as its `next` (see {@link FLOWS}). That
- * means building the request, keeping it, and navigating somewhere else with it
- * in hand. Everything else about it is unchanged and must be: the `state` and
- * the PKCE verifier are written to storage by this call, and the callback will
- * not accept a response without them.
+ * It is loaded on demand rather than from the head of every page: on a build
+ * with no client id it is never fetched at all, and on the others it arrives
+ * after the page the reader actually came for.
  */
-class Client extends UserManager {
-  async authorizeUrl(args: SigninRedirectArgs): Promise<string> {
-    const { url } = await this._client.createSigninRequest({
-      request_type: "si:r",
-      ...args,
-    });
-    return url;
-  }
+function library(): Promise<GoogleIdentity> {
+  if (loading) return loading;
+
+  loading = new Promise<GoogleIdentity>((resolve, reject) => {
+    const ready = () => {
+      const id = window.google?.accounts?.id;
+      if (id) resolve(id);
+      else reject(new Error("Google Identity Services loaded without an id client"));
+    };
+
+    const existing = document.querySelector<HTMLScriptElement>(`script[src="${GIS_SRC}"]`);
+    if (existing) {
+      if (window.google?.accounts?.id) ready();
+      else existing.addEventListener("load", ready, { once: true });
+      existing.addEventListener("error", () => reject(new Error("could not load Google Identity Services")), { once: true });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = GIS_SRC;
+    script.async = true;
+    script.defer = true;
+    script.addEventListener("load", ready, { once: true });
+    script.addEventListener("error", () => reject(new Error("could not load Google Identity Services")), { once: true });
+    document.head.append(script);
+  });
+
+  loading.catch(() => {
+    // A failed load must not be cached as a permanent verdict: a reader on a
+    // flaky connection who presses the button again deserves a second attempt.
+    loading = null;
+  });
+  return loading;
 }
 
-let manager: Client | null = null;
-
-/** The absolute form of a route, as registered with the provider. */
-const absolute = (path: string) => new URL(path, window.location.origin).href;
+let started: Promise<GoogleIdentity> | null = null;
 
 /**
- * The configured client, or null when this build has no provider. Built once,
- * lazily, and only in the browser: it reads `window.location` for the exact
- * redirect URIs, and there is nothing for it to do while the page is a string.
+ * Configures the client, once.
+ *
+ * The nonce is generated here and kept beside the credential, so a token can be
+ * checked against the request that asked for it even after a reload — a token
+ * minted for some other page, or replayed from somewhere else, does not carry
+ * this tab's nonce and is refused.
  */
-export function client(): Client | null {
-  if (!OIDC_READY || typeof window === "undefined") return null;
-  if (manager) return manager;
-
-  manager = new Client({
-    authority: OIDC.issuer,
-    client_id: OIDC.clientId,
-    scope: OIDC.scope,
-
-    redirect_uri: absolute(ROUTES.callback),
-    silent_redirect_uri: absolute(ROUTES.silent),
-    post_logout_redirect_uri: absolute(ROUTES.home),
-
-    // OAuth 2.1, spelled out rather than left to a default: the code flow, with
-    // PKCE, and no way for a redeploy to quietly turn either of them off.
-    response_type: "code",
-    response_mode: "query",
-    disablePKCE: false,
-
-    // Tokens in the tab; the redirect's proof-of-possession in the tab's
-    // storage, where it can survive the navigation it has to be checked across.
-    userStore: new MemoryStore(),
-    stateStore: new WebStorageStateStore({ store: window.sessionStorage }),
-
-    // Renew before expiry so a long session never bounces mid-task, and hand
-    // the tokens back to the provider on the way out instead of leaving them
-    // valid until they age out.
-    automaticSilentRenew: true,
-    includeIdTokenInSilentRenew: true,
-    validateSubOnSilentRenew: true,
-    revokeTokensOnSignout: true,
-
-    // The id token is the identity. Do not go back to the userinfo endpoint for
-    // more of a person than was asked for at the door.
-    loadUserInfo: false,
-    // Session monitoring is a third-party iframe polling the provider on a
-    // timer. Silent renew already notices a session that has ended.
-    monitorSession: false,
+function start(): Promise<GoogleIdentity> {
+  if (started) return started;
+  started = library().then((id) => {
+    id.initialize({
+      client_id: GOOGLE.clientId,
+      callback: (response) => void accept(response.credential),
+      nonce: nonce(),
+      // Returning readers get One Tap's one-click path rather than the account
+      // chooser; it is never automatic enough to sign anyone in unasked.
+      auto_select: true,
+      cancel_on_tap_outside: true,
+      context: "signin",
+      itp_support: true,
+      use_fedcm_for_prompt: true,
+    });
+    return id;
   });
-
-  // Sweep abandoned PKCE entries — a sign-in someone started and walked away
-  // from leaves a verifier behind, and stale ones should not accumulate.
-  void manager.clearStaleState();
-
-  manager.events.addUserLoaded((user) => announce(read(user)));
-  manager.events.addUserUnloaded(() => announce(null));
-  manager.events.addSilentRenewError((error) => {
-    // Not fatal on its own: the person is still signed in until the token they
-    // hold expires. It is the reason a session ends without anyone clicking.
-    console.warn("silent renew failed", error);
-  });
-
-  return manager;
+  return started;
 }
 
-/** Reads the claims this site cares about off a validated id token. */
-function read(user: User): Account {
-  const claims = user.profile as Record<string, unknown>;
-  const text = (key: string) => {
-    const value = claims[key];
+/** This tab's nonce, made once and remembered for as long as the tab lives. */
+function nonce(): string {
+  const held = window.sessionStorage.getItem(NONCE);
+  if (held) return held;
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  const made = [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+  window.sessionStorage.setItem(NONCE, made);
+  return made;
+}
+
+/* ── Verifying what comes back ────────────────────────────────────────────── */
+
+const decode = (segment: string) => {
+  const padded = segment.replace(/-/g, "+").replace(/_/g, "/");
+  const binary = atob(padded.padEnd(padded.length + ((4 - (padded.length % 4)) % 4), "="));
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+};
+
+const text = new TextDecoder();
+
+interface Jwk {
+  kid: string;
+  kty: string;
+  alg?: string;
+  use?: string;
+  n: string;
+  e: string;
+}
+
+let keys: Map<string, CryptoKey> | null = null;
+
+/**
+ * Google's signing keys, by key id.
+ *
+ * They rotate, so a `kid` that is not in the cached set is a reason to fetch
+ * the set again rather than to reject the token — but only once, so a token
+ * naming a key that does not exist cannot make this page hammer the endpoint.
+ */
+async function signingKey(kid: string): Promise<CryptoKey | null> {
+  if (keys?.has(kid)) return keys.get(kid)!;
+
+  const response = await fetch(JWKS_URL, { credentials: "omit" });
+  if (!response.ok) throw new Error(`could not fetch Google's signing keys: ${response.status}`);
+  const { keys: published } = (await response.json()) as { keys: Jwk[] };
+
+  const fresh = new Map<string, CryptoKey>();
+  for (const jwk of published) {
+    if (jwk.kty !== "RSA" || (jwk.alg && jwk.alg !== "RS256")) continue;
+    fresh.set(
+      jwk.kid,
+      await crypto.subtle.importKey(
+        "jwk",
+        { kty: "RSA", n: jwk.n, e: jwk.e, alg: "RS256", ext: true },
+        { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+        false,
+        ["verify"]
+      )
+    );
+  }
+  keys = fresh;
+  return fresh.get(kid) ?? null;
+}
+
+/**
+ * The claims of a token that is Google's, is for us, is for this tab, and has
+ * not expired — or null, for a token that is any of those things and no person
+ * should be shown for.
+ */
+async function verify(token: string): Promise<Record<string, unknown> | null> {
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  const [rawHeader, rawPayload, rawSignature] = parts as [string, string, string];
+
+  let header: { alg?: string; kid?: string };
+  let claims: Record<string, unknown>;
+  try {
+    header = JSON.parse(text.decode(decode(rawHeader)));
+    claims = JSON.parse(text.decode(decode(rawPayload)));
+  } catch {
+    return null;
+  }
+
+  // RS256 only. An `alg` of `none`, or a symmetric algorithm keyed on something
+  // the token itself supplies, is the classic way a JWT check is walked past.
+  if (header.alg !== "RS256" || !header.kid) return null;
+
+  const key = await signingKey(header.kid);
+  if (!key) return null;
+
+  const signed = await crypto.subtle.verify(
+    { name: "RSASSA-PKCS1-v1_5" },
+    key,
+    decode(rawSignature),
+    new TextEncoder().encode(`${rawHeader}.${rawPayload}`)
+  );
+  if (!signed) return null;
+
+  const claim = (name: string) => {
+    const value = claims[name];
     return typeof value === "string" ? value : "";
   };
-  const issuer = text("iss");
-  const subject = text("sub");
-  const email = text("email");
+
+  if (!(GOOGLE_ISSUERS as readonly string[]).includes(claim("iss"))) return null;
+  // The audience is what stops a perfectly valid Google token, issued to some
+  // other site, from signing its holder in here.
+  if (claim("aud") !== GOOGLE.clientId) return null;
+  if (claim("nonce") !== nonce()) return null;
+  if (!claim("sub")) return null;
+
+  const expires = typeof claims.exp === "number" ? claims.exp : 0;
+  if (!expires || expires * 1000 <= Date.now()) return null;
+
+  return claims;
+}
+
+/** Reads the claims this site cares about off a verified token. */
+function read(claims: Record<string, unknown>): Account {
+  const claim = (name: string) => {
+    const value = claims[name];
+    return typeof value === "string" ? value : "";
+  };
+  const issuer = claim("iss");
+  const subject = claim("sub");
+  const email = claim("email");
+  const expires = typeof claims.exp === "number" ? claims.exp : 0;
 
   return {
     id: `${issuer}|${subject}`,
     issuer,
     subject,
     email,
-    emailVerified: claims.email_verified === true,
+    emailVerified: claims.email_verified === true || claims.email_verified === "true",
     // A person who gave a name is called by it; otherwise the address they
     // signed in with, and never a bare `sub` — that is a database key.
-    name: text("name") || text("preferred_username") || text("given_name") || email,
-    picture: text("picture"),
-    organisation: text("org_id") || text("organization") || text("tenant") || "",
-    scopes: (user.scope ?? OIDC.scope).split(" ").filter(Boolean),
-    expiresIn: user.expires_in ?? 0,
+    name: claim("name") || claim("given_name") || email,
+    picture: claim("picture"),
+    organisation: claim("hd"),
+    expiresIn: Math.max(0, Math.round(expires - Date.now() / 1000)),
     claims,
   };
 }
 
+/* ── Who is signed in ─────────────────────────────────────────────────────── */
+
 type Watcher = (account: Account | null) => void;
 const watchers = new Set<Watcher>();
 let latest: Account | null = null;
+let expiry: number | undefined;
 
 function announce(account: Account | null) {
   // One person's cached work must not be sitting there for the next one.
   partition(account?.id ?? null);
   latest = account;
   for (const watcher of watchers) watcher(account);
+
+  window.clearTimeout(expiry);
+  if (account) {
+    // The statement has a stated lifetime and this honours it: when it runs
+    // out the person is signed out here, rather than the page going on showing
+    // a name backed by nothing.
+    expiry = window.setTimeout(() => forget(), account.expiresIn * 1000);
+  }
 }
 
 /**
  * Watches who is signed in. Fires immediately with what is known now — which
- * on a fresh page is `null` until {@link restore} has been round the provider —
+ * on a fresh page is `null` until {@link restore} has read the tab's token —
  * and again on every change. Returns the unsubscribe.
  */
 export function observe(watcher: Watcher): () => void {
@@ -236,129 +383,104 @@ export function current(): Account | null {
   return latest;
 }
 
+/** Takes a credential from Google, checks it, and keeps it if it holds up. */
+async function accept(credential: string): Promise<Account | null> {
+  const claims = await verify(credential);
+  if (!claims) {
+    console.warn("a sign-in credential did not verify and was discarded");
+    forget();
+    return null;
+  }
+  window.sessionStorage.setItem(CREDENTIAL, credential);
+  announce(read(claims));
+  return latest;
+}
+
+/** Drops the session in this tab. Google's own session is untouched. */
+function forget() {
+  window.sessionStorage.removeItem(CREDENTIAL);
+  announce(null);
+}
+
 /**
- * Picks the session back up on a page load. There is never a token in memory at
- * that point, so this is a `prompt=none` round trip to the provider in a hidden
- * frame: it returns a person if the provider still has a session for them, and
- * null — quietly, without a redirect — if it does not.
+ * Picks the session back up on a page load: the tab's token, verified again
+ * from scratch, or nothing. No network call and no interface — a reader who is
+ * signed out is simply signed out, and is never interrupted to be told so.
  */
 export async function restore(): Promise<Account | null> {
-  const oidc = client();
-  if (!oidc) return null;
-
-  const held = await oidc.getUser();
-  if (held && !held.expired) {
-    announce(read(held));
-    return latest;
-  }
+  if (!SIGN_IN_READY || typeof window === "undefined") return null;
+  const held = window.sessionStorage.getItem(CREDENTIAL);
+  if (!held) return null;
 
   try {
-    const user = await oidc.signinSilent();
-    return user ? read(user) : null;
-  } catch {
-    // Signed out, or the provider will not answer in a frame. Either way the
-    // person is anonymous and the page should say so rather than throw.
-    announce(null);
+    const claims = await verify(held);
+    if (!claims) {
+      forget();
+      return null;
+    }
+    announce(read(claims));
+    return latest;
+  } catch (error) {
+    // Google's keys were unreachable, so the token cannot be checked. An
+    // unchecked token is not a person: say signed out and mean it.
+    console.warn("could not verify the held credential", error);
+    forget();
     return null;
   }
 }
 
-export interface SignInOptions {
-  /** The address typed into the form, so the provider can skip asking again. */
-  email?: string;
-  /** Which federated identity to jump to: `"google"` or `"sso"`. */
-  via?: "google" | "sso";
-  /** A path on this site to come back to. Same-origin paths only. */
-  returnTo?: string;
-  /**
-   * What to ask the provider for: `"select_account"` when someone says they are
-   * not the person it remembers, `"login"` to force credentials again. Omitted,
-   * the provider reuses its own session if it has one.
-   */
-  prompt?: "login" | "select_account" | "consent";
-}
-
-/** Leaves for the provider. Resolves only if the redirect could not start. */
-export async function signIn({ email, via, returnTo, prompt }: SignInOptions = {}) {
-  const oidc = client();
-  if (!oidc) throw new Error("no identity provider is configured");
-
-  const request: SigninRedirectArgs = {
-    prompt,
-    login_hint: email || undefined,
-    state: safeReturn(returnTo),
-  };
-
-  const flow = via ? FLOWS[via] : "";
-  if (!flowReady(flow)) {
-    await oidc.signinRedirect(request);
-    return;
-  }
-
-  // The same authorization request, reached the long way round, so that the
-  // person lands on Google rather than on a screen asking which Google. The
-  // flow runs first and hands the request on when the upstream returns.
-  window.location.href = detour(flow, await oidc.authorizeUrl(request));
-}
-
 /**
- * The URL of an authentik flow, carrying an authorization request to resume.
+ * Puts Google's own button in a container.
  *
- * `next` has to be *relative*: authentik refuses an absolute one, which is what
- * keeps this from being an open redirect — the parameter can only ever name a
- * path on the provider's own origin, and the only path worth naming is the
- * authorization endpoint the library just built a request for.
+ * It is Google's button, drawn by Google in a frame this page cannot reach
+ * into, and that is the point: the one control on the site that asks a person
+ * to trust who they are talking to should be the one the browser and Google
+ * vouch for, not a convincing copy of it. The frame around it is ours.
  */
-function detour(flow: string, authorize: string) {
-  const { pathname, search } = new URL(authorize);
-  const next = encodeURIComponent(pathname + search);
-  return `${ISSUER_ORIGIN}/if/flow/${encodeURIComponent(flow)}/?next=${next}`;
+export async function mountSignIn(container: HTMLElement, options: ButtonOptions = {}) {
+  if (!SIGN_IN_READY) throw new Error("no sign-in is configured");
+  const id = await start();
+  id.renderButton(container, {
+    type: "standard",
+    theme: "outline",
+    size: "large",
+    text: "continue_with",
+    shape: "pill",
+    logo_alignment: "center",
+    ...options,
+  });
 }
 
 /**
- * Finishes the flow on the callback page: checks `state`, exchanges the code
- * with the verifier, validates the id token. Returns where to go next.
+ * Offers One Tap: the one-click way back in for someone Google already knows,
+ * and nothing at all for someone it does not. Only the sign-in page calls it —
+ * a prompt that appears over a page a reader came to read is an interruption,
+ * not a convenience.
  */
-export async function completeSignIn(): Promise<string> {
-  const oidc = client();
-  if (!oidc) throw new Error("no identity provider is configured");
-
-  const user = await oidc.signinCallback(window.location.href);
-  // The code and state stay in history and in any referrer otherwise. They are
-  // spent, but a spent code in a bookmark is still a code in a bookmark.
-  window.history.replaceState({}, "", ROUTES.callback);
-  return safeReturn(typeof user?.state === "string" ? user.state : undefined);
+export async function offerOneTap() {
+  if (!SIGN_IN_READY || latest) return;
+  const id = await start();
+  id.prompt();
 }
 
 /**
- * Ends the session in both places. Local state goes first, so a provider that
- * is slow or unreachable cannot leave this browser holding a signed-in page.
+ * Ends the session here, and stops Google offering to resume it automatically.
+ *
+ * It cannot and should not sign anyone out of Google itself: this site was told
+ * who someone is, it was never given the account, and reaching across to end a
+ * session it does not own would be overreach. The account page says so.
  */
 export async function signOut() {
-  const oidc = client();
-  if (!oidc) return;
-  await oidc.removeUser();
-  announce(null);
+  forget();
+  if (!SIGN_IN_READY) return;
   try {
-    await oidc.signoutRedirect();
+    const id = await start();
+    id.disableAutoSelect();
   } catch (error) {
-    console.warn("provider sign-out failed", error);
-    window.location.href = ROUTES.home;
+    // The library is unreachable, which changes nothing that matters: the
+    // token is already gone from this tab.
+    console.warn("could not reach Google Identity Services on sign-out", error);
   }
-}
-
-/**
- * A path on this site, or the home page.
- *
- * Whatever is handed back after a redirect has been outside the site and can
- * say anything; sending a freshly signed-in person to an attacker's copy of the
- * login page on the strength of it is the oldest trick there is. Only a plain
- * absolute path is accepted — no scheme, no host, and not `//host`, which a
- * browser reads as one.
- */
-function safeReturn(path: string | undefined): string {
-  if (!path || !path.startsWith("/") || path.startsWith("//")) return ROUTES.home;
-  return path;
 }
 
 /* ── Per-person storage ───────────────────────────────────────────────────── */

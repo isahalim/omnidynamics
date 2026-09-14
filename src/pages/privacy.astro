@@ -11,13 +11,10 @@
  */
 import Base from "../layouts/Base.astro";
 import Logo from "../components/Logo.astro";
-import { CAL, CAL_READY, EMAIL, FLOWS, ISSUER_HOST, OIDC_READY, ROUTES, flowReady } from "../lib/auth/config";
+import { CAL, CAL_READY, EMAIL, PROVIDER_HOST, ROUTES, SIGN_IN_READY } from "../lib/auth/config";
 import { withBase } from "../lib/base";
 
 const UPDATED = "14 September 2026";
-// Google is a processor only on a build where the button exists, so the page
-// discloses it on exactly those builds and not on the others.
-const googleReady = flowReady(FLOWS.google);
 const calHost = (() => {
   try {
     return new URL(CAL.origin).host;
@@ -38,7 +35,7 @@ const calHost = (() => {
         <span class="wordmark">OmniDynamics</span>
       </a>
       <nav class="links">
-        {OIDC_READY && <a class="clicky" href={ROUTES.account}>Your account</a>}
+        {SIGN_IN_READY && <a class="clicky" href={ROUTES.account}>Your account</a>}
         <a class="clicky" href={ROUTES.book}>Book a demo</a>
       </nav>
     </header>
@@ -66,49 +63,54 @@ const calHost = (() => {
       </p>
 
       <h2>Signing in</h2>
-      {OIDC_READY ? (
+      {SIGN_IN_READY ? (
         <>
           <p>
-            Sign-in is OpenID Connect, using the authorization code flow with
-            PKCE. You authenticate at
-            {" "}<span class="host">{ISSUER_HOST}</span>, not here. Your
+            Signing in is <strong>Sign in with Google</strong>, and that is the
+            whole of it. You authenticate at
+            {" "}<span class="host">{PROVIDER_HOST}</span>, not here. Your
             password, one-time code or passkey never touches this site, and we
             could not read it if we tried.
           </p>
           <p>
-            What comes back is an identity token containing the claims we asked
-            for: <strong>your name</strong>, <strong>your email address</strong>,
-            and the identifier your provider uses for you. Your account page
-            lists every claim actually held, including anything your provider
-            chose to add.
+            What comes back is one identity token: a short statement, signed by
+            Google, saying who you are. It carries <strong>your name</strong>,
+            {" "}<strong>your email address</strong>, your profile picture and
+            the identifier Google uses for you, and your account page lists
+            every field of it. It is <em>not</em> an access token — there is no
+            key to your mail, your files, your calendar or your contacts in it,
+            we did not ask for one, and there is nothing here that could be used
+            to act as you at Google.
           </p>
           <p>
-            Those tokens are kept in the browser tab's memory and nowhere else.
-            Closing the tab discards them. We do not write them to
-            <code>localStorage</code>, we do not have a server that could store
-            them, and the long-lived half of the session is a cookie held by
-            your provider — not by us.
+            We check that token before believing a word of it: the signature
+            against Google's published keys, that Google issued it, that it was
+            issued to this site rather than some other one, and that it has not
+            expired. A token that fails any of those is thrown away.
+          </p>
+          <p>
+            It is kept in this tab's storage and nowhere else. Closing the tab
+            discards it, it expires on its own within the hour, and nothing goes
+            to <code>localStorage</code>, where it would outlive the visit. We
+            have no server that could store it, because we have no server.
+          </p>
+          <p>
+            Because Google is who you sign in with, Google knows that you use
+            this site, in the same way it would for any site you sign in to with
+            it. What Google does with that is governed by
+            {" "}<a href="https://policies.google.com/privacy" rel="noreferrer">its
+            own privacy policy</a>, and you can withdraw this site's access at
+            any time from
+            {" "}<a href="https://myaccount.google.com/connections" rel="noreferrer">your
+            Google account's connections</a>.
           </p>
           <p>
             If you sign in to two different accounts on one browser, anything
             cached for the first is deleted the moment the second arrives. We
-            key that cache on your provider <em>and</em> your identifier, so two
+            key that cache on the issuer <em>and</em> your identifier, so two
             people with the same identifier at different providers are never the
             same person here.
           </p>
-          {googleReady && (
-            <p>
-              <strong>Continuing with Google</strong> adds Google to that chain,
-              and only that. Google authenticates you and tells
-              {" "}<span class="host">{ISSUER_HOST}</span> your name, your email
-              address and that the address is verified; the site itself never
-              speaks to Google, holds no Google token, and is given the same
-              identity token it would be given for any other way in. Nothing
-              about your Google account beyond those three things is asked for
-              or received, and we get no access to your mail, your files or your
-              calendar.
-            </p>
-          )}
         </>
       ) : (
         <p>
@@ -147,22 +149,18 @@ const calHost = (() => {
       <h2>Who else processes it</h2>
       <ul class="who">
         <li><strong>Cloudflare</strong> — serves the site; request logs.</li>
-        {OIDC_READY && (
-          <li>
-            <strong>{ISSUER_HOST}</strong> — our identity provider; holds your
-            account and authenticates you.
-          </li>
-        )}
+
         {CAL_READY && (
           <li>
             <strong>{calHost}</strong> — Cal.com; scheduling and confirmations.
           </li>
         )}
-        {(CAL_READY || googleReady) && (
+        {(CAL_READY || SIGN_IN_READY) && (
           <li>
             <strong>Google</strong> —
-            {googleReady && <> authenticates you if you choose to sign in that way</>}
-            {googleReady && CAL_READY && <>;</>}
+            {SIGN_IN_READY && <> authenticates you and tells us your name and
+            email address</>}
+            {SIGN_IN_READY && CAL_READY && <>;</>}
             {CAL_READY && <> the calendar invitation, and the Meet room it
             carries when the meeting is held on Meet</>}.
           </li>
@@ -175,15 +173,16 @@ const calHost = (() => {
 
       <h2>How long</h2>
       <p>
-        Tokens: until the tab closes. Cached page state: until you sign out, or
-        a different account signs in on that browser. Bookings and the mail
-        around them: kept while we are in touch, and deleted on request.
+        The identity token: until it expires, or the tab closes — whichever
+        comes first. Cached page state: until you sign out, or a different
+        account signs in on that browser. Bookings and the mail around them:
+        kept while we are in touch, and deleted on request.
       </p>
 
       <h2>Your say</h2>
       <p>
         You can see what is held, clear it, and sign out from
-        {OIDC_READY ? <> <a href={ROUTES.account}>your account page</a></> : <> the account page, once sign-in is enabled</>}.
+        {SIGN_IN_READY ? <> <a href={ROUTES.account}>your account page</a></> : <> the account page, once sign-in is enabled</>}.
         For access, correction, export or deletion of anything beyond the
         browser — a booking, a thread of mail, the account itself — write to
         {" "}<a href={`mailto:${EMAIL}`}>{EMAIL}</a> and we will do it and tell

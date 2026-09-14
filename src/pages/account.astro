@@ -3,15 +3,15 @@
  * Everything this site knows about the person reading it, on one page.
  *
  * Not a settings screen — there is nothing here to configure, because the
- * account lives at the provider and this site holds no copy of it. What it is
- * for is disclosure: the claims that arrived in the id token, the scopes the
- * provider actually granted, what is cached in this browser and for how long,
- * and two buttons that end it. A privacy policy that says "we hold your name
- * and email" is a promise; a page that shows exactly what is held is a fact.
+ * account lives at Google and this site holds no copy of it. What it is for is
+ * disclosure: every claim that arrived in the identity token, what is cached in
+ * this browser and for how long, and two buttons that end it. A privacy policy
+ * that says "we hold your name and email" is a promise; a page that shows
+ * exactly what is held is a fact.
  */
 import Base from "../layouts/Base.astro";
 import Logo from "../components/Logo.astro";
-import { EMAIL, ISSUER_HOST, OIDC_READY, ROUTES } from "../lib/auth/config";
+import { EMAIL, PROVIDER_HOST, SIGN_IN_READY, ROUTES } from "../lib/auth/config";
 import { withBase } from "../lib/base";
 ---
 
@@ -29,7 +29,7 @@ import { withBase } from "../lib/base";
     </header>
 
     <main>
-      {OIDC_READY ? (
+      {SIGN_IN_READY ? (
         <>
           <p class="waiting" data-waiting>Checking your session…</p>
 
@@ -50,25 +50,27 @@ import { withBase } from "../lib/base";
 
             <h2>What we were told about you</h2>
             <p class="note">
-              These claims came from <span class="host">{ISSUER_HOST}</span> in a
-              signed identity token when you signed in. We asked for your name
-              and email address; a provider may send a little more, and anything
-              it sent is listed here.
+              These claims came from <span class="host">{PROVIDER_HOST}</span> in
+              an identity token Google signed when you signed in — checked here
+              against Google's published keys before any of it was believed. We
+              asked for your name and email address; Google sends a little more
+              alongside them, and everything it sent is listed here.
             </p>
             <dl class="claims" data-claims></dl>
 
             <h2>What this browser is holding</h2>
             <ul class="facts">
               <li>
-                <strong>Access and identity tokens</strong> — in memory only, for
-                this tab. Closing it discards them; nothing is written to
-                <code>localStorage</code>, where a token would outlive the visit.
+                <strong>One identity token</strong> — in this tab's storage, and
+                nowhere else. It says who you are and nothing more: there is no
+                access token here, and nothing that could be used to reach into
+                your Google account. Closing the tab discards it, and it expires
+                on its own in <span data-expires>—</span>.
               </li>
               <li>
                 <strong>Session</strong> — held as a cookie by
-                <span class="host">{ISSUER_HOST}</span>, not by this site. Your
-                token is renewed against it in the background and expires in
-                <span data-expires>—</span>.
+                <span class="host">{PROVIDER_HOST}</span>, not by this site.
+                Signing out of Google ends it; signing out here does not.
               </li>
               <li>
                 <strong>Cached page state</strong> — filed under your account and
@@ -83,12 +85,16 @@ import { withBase } from "../lib/base";
 
             <h2>Ending it</h2>
             <p class="note">
-              Signing out clears this browser first, then asks
-              <span class="host">{ISSUER_HOST}</span> to end the session and
-              revoke the tokens. To delete the account itself — the copy that
-              matters — use your provider, or write to
-              {" "}<a href={`mailto:${EMAIL}`}>{EMAIL}</a> and we will confirm
-              what was removed.
+              Signing out discards the token in this browser and tells Google to
+              stop offering to sign you back in without asking. It does not sign
+              you out of Google, and it should not: this site was told who you
+              are, it was never given your account, and ending a session it does
+              not own is not its business. To remove this site's access at the
+              Google end, use
+              {" "}<a class="clicky" href="https://myaccount.google.com/connections"
+                rel="noreferrer">your Google account's connections</a>; to ask us
+              what we hold, write to
+              {" "}<a href={`mailto:${EMAIL}`}>{EMAIL}</a>.
             </p>
             <div class="buttons">
               <button type="button" class="primary clicky" data-signout>Sign out</button>
@@ -101,8 +107,8 @@ import { withBase } from "../lib/base";
         <section class="out">
           <h1>Accounts are not connected</h1>
           <p class="lede">
-            This build has no identity provider configured, so there is no
-            account to show.
+            This build has no sign-in configured, so there is no account to
+            show.
           </p>
           <p class="links"><a class="clicky" href={ROUTES.book}>Book a demo</a></p>
         </section>
@@ -250,10 +256,10 @@ import { withBase } from "../lib/base";
 </style>
 
 <script>
-  import { OIDC_READY } from "../lib/auth/config";
+  import { SIGN_IN_READY } from "../lib/auth/config";
   import { current, observe, restore, scopedStorage, signOut, type Account } from "../lib/auth/session";
 
-  if (OIDC_READY) {
+  if (SIGN_IN_READY) {
     const waiting = document.querySelector<HTMLElement>("[data-waiting]");
     const out = document.querySelector<HTMLElement>("[data-out]");
     const inside = document.querySelector<HTMLElement>("[data-in]");
@@ -288,17 +294,16 @@ import { withBase } from "../lib/base";
       set(
         "[data-email]",
         who.email
-          ? `${who.email}${who.emailVerified ? " · verified by your provider" : " · not verified"}`
+          ? `${who.email}${who.emailVerified ? " · verified by Google" : " · not verified"}`
           : "No email address was shared."
       );
       set("[data-expires]", lasting(who.expiresIn));
 
-      // Every claim held, sorted, with the scopes granted beside them — which
-      // may be fewer than were asked for, and that is worth being able to see.
+      // Every claim held, sorted, and none of them abridged — the point of the
+      // page is that there is nothing here you were not shown.
       const rows: [string, string][] = Object.entries(who.claims)
         .map(([key, value]) => [key, asText(value)] as [string, string])
         .sort(([a], [b]) => a.localeCompare(b));
-      rows.push(["scopes granted", who.scopes.join(", ")]);
       claims.replaceChildren(
         ...rows.flatMap(([key, value]) => {
           const dt = document.createElement("dt");
@@ -316,7 +321,7 @@ import { withBase } from "../lib/base";
 
     // `observe` answers immediately with what is known now, which on a cold
     // load is "nobody" — and this page must not say "not signed in" to someone
-    // who is, for the second it takes to ask the provider. Nothing is shown
+    // who is, for the moment it takes to check the token. Nothing is shown
     // until there is an answer worth showing.
     let settled = false;
     observe((who) => {

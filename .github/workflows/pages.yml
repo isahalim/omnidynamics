@@ -35,11 +35,7 @@ jobs:
         env:
           SITE_URL: https://${{ github.repository_owner }}.github.io
           SITE_BASE: /${{ github.event.repository.name }}
-          PUBLIC_OIDC_ISSUER: ${{ vars.PUBLIC_OIDC_ISSUER }}
-          PUBLIC_OIDC_CLIENT_ID: ${{ vars.PUBLIC_OIDC_CLIENT_ID }}
-          PUBLIC_OIDC_SCOPE: ${{ vars.PUBLIC_OIDC_SCOPE }}
-          PUBLIC_OIDC_FLOW_GOOGLE: ${{ vars.PUBLIC_OIDC_FLOW_GOOGLE }}
-          PUBLIC_OIDC_FLOW_SSO: ${{ vars.PUBLIC_OIDC_FLOW_SSO }}
+          PUBLIC_GOOGLE_CLIENT_ID: ${{ vars.PUBLIC_GOOGLE_CLIENT_ID }}
           PUBLIC_CAL_LINK: ${{ vars.PUBLIC_CAL_LINK }}
           PUBLIC_CAL_ORIGIN: ${{ vars.PUBLIC_CAL_ORIGIN }}
         # Not `npm run build`: that validates every WGSL entry against a real

@@ -17,7 +17,7 @@
 import Base from "../layouts/Base.astro";
 import Logo from "../components/Logo.astro";
 import LightPrism from "../components/LightPrism.astro";
-import { CAL_READY, EMAIL, OIDC_READY, ROUTES } from "../lib/auth/config";
+import { CAL_READY, EMAIL, SIGN_IN_READY, ROUTES } from "../lib/auth/config";
 import { withBase } from "../lib/base";
 ---
 
@@ -35,7 +35,7 @@ import { withBase } from "../lib/base";
       </a>
       <nav class="links">
         <a class="clicky" href={withBase("/")}>Tools</a>
-        {OIDC_READY && <a class="clicky" href={ROUTES.signIn}>Sign in</a>}
+        {SIGN_IN_READY && <a class="clicky" href={ROUTES.signIn}>Sign in</a>}
       </nav>
     </header>
 
@@ -244,7 +244,7 @@ import { withBase } from "../lib/base";
 </style>
 
 <script>
-  import { CAL_READY, OIDC_READY } from "../lib/auth/config";
+  import { CAL_READY, SIGN_IN_READY } from "../lib/auth/config";
   import { mountBooking } from "../lib/booking";
 
   if (CAL_READY) {
@@ -253,12 +253,12 @@ import { withBase } from "../lib/base";
     const fallback = document.querySelector<HTMLElement>("[data-fallback]");
     if (!target || !loading || !fallback) throw new Error("booking markup missing");
 
-    // If the provider still has a session, the name and address are already
-    // known and there is no reason to make someone type them again. Nobody
-    // waits on that though: a signed-out reader must not sit in front of an
-    // empty card while a silent renew times out — and on a build with no
-    // provider at all, the client is never fetched.
-    const known = !OIDC_READY
+    // If this tab is signed in, the name and address are already known and
+    // there is no reason to make someone type them again. Nobody waits on that
+    // though: checking the token means fetching Google's signing keys, and a
+    // signed-out reader must not sit in front of an empty card while that
+    // happens — and on a build with no sign-in at all, none of it is fetched.
+    const known = !SIGN_IN_READY
       ? Promise.resolve(null)
       : import("../lib/auth/session").then((session) =>
           Promise.race([

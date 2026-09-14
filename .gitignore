@@ -16,9 +16,3 @@ dist/
 # os / editor
 .DS_Store
 *.log
-
-# self-hosted authentik: secrets, uploaded media, generated signing keys
-infra/authentik/.env
-infra/authentik/data/
-infra/authentik/certs/
-infra/authentik/custom-templates/
