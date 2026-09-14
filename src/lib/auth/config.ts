@@ -75,9 +75,16 @@ export const ROUTES = {
   silent: `${BASE}/auth/silent/`,
 } as const;
 
-/** Cal.com's hosted or self-hosted instance, and the event type to open. */
+/**
+ * Cal.com's hosted or self-hosted instance, and the event type to open.
+ *
+ * The booking link is the one public fact here that does not change between
+ * deployments, so it is the default rather than something a build has to be
+ * told. The environment still wins, which is what a self-hosted instance or a
+ * second event type would use.
+ */
 export const CAL = {
-  link: read(import.meta.env.PUBLIC_CAL_LINK),
+  link: read(import.meta.env.PUBLIC_CAL_LINK) || "s-halim-0296y9/30min",
   origin: read(import.meta.env.PUBLIC_CAL_ORIGIN) || "https://cal.com",
 } as const;
 

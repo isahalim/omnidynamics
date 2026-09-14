@@ -116,9 +116,9 @@ const calHost = (() => {
             email address, the time you picked and anything you write in the
             notes. If you are already signed in, your name and address are
             filled in for you and remain editable. The confirmed booking creates
-            a calendar event with a Google Meet link, which means Google
-            processes the invitation as it would any meeting. We use it to meet
-            you and to follow up about it.
+            a calendar event carrying the video link for the call; where that
+            link is a Google Meet, Google processes the invitation as it would
+            any meeting. We use it to meet you and to follow up about it.
           </p>
         </>
       ) : (
@@ -144,8 +144,8 @@ const calHost = (() => {
         )}
         {CAL_READY && (
           <li>
-            <strong>Google</strong> — the calendar invitation and the Meet room
-            it carries.
+            <strong>Google</strong> — the calendar invitation, and the Meet room
+            it carries when the meeting is held on Meet.
           </li>
         )}
       </ul>
