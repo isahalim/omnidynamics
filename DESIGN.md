@@ -85,6 +85,7 @@ On this site a WebGPU canvas shades that same wall properly, with a cast shadow
 and baked contact occlusion, and the CSS above is what stands in before it comes
 up or where it cannot. **A product without the renderer uses the CSS wall alone
 and is still on-style** — the gradient is the design, the shader is the luxury.
+§12 has the files, the shaders and the budget if you want the real one.
 Set `<meta name="theme-color" content="#d2ccc2">` so the browser chrome joins
 the room.
 
@@ -204,8 +205,8 @@ most common way to break the composition.
 
 ### The frame box — measured, never painted
 
-The object beside the copy is drawn on the full-viewport canvas behind the page,
-**not** inside a container. The page contributes an empty, invisible box; the
+The object beside the copy is drawn on the full-viewport canvas behind the page
+(§12), **not** inside a container. The page contributes an empty, invisible box; the
 renderer measures it and dollies the camera until the object fills that
 rectangle. This is what keeps the wall continuous — there is no second surface
 for the object to sit in.
@@ -547,7 +548,259 @@ Non-negotiable, and cheap at this scale:
 
 ---
 
-## 12. Starting a new product
+## 12. The room in three dimensions — assets, shaders, and where they live
+
+Everything above can be built with CSS alone. This section is the other half:
+the actual files behind the lit plaster, the glass solid, the cast shadow and
+the black orb, so the effect can be lifted rather than re-derived.
+
+### What is actually being drawn
+
+One `<canvas>`, fixed at `inset: 0`, `z-index: -1`, covering the viewport behind
+the page. It is **the page's wall, not a picture hung on it** — the plaster the
+shader lights is the same plaster the header sits on. The CSS gradient from §2
+is underneath it and shows through only before the canvas fades up, and on
+machines without WebGPU. Nothing between them paints a background, which is what
+keeps the seam out.
+
+```css
+.wall {
+  position: fixed; inset: 0; z-index: -1;
+  inline-size: 100%; block-size: 100%;
+  touch-action: none;
+  opacity: 0; transition: opacity 0.9s ease;   /* 0.6s on interior pages */
+}
+.wall.ready { opacity: 1; }
+```
+
+### The dependency
+
+| | |
+|---|---|
+| Package | [`vgpu`](https://www.npmjs.com/package/vgpu) `^0.4.0` + [`@vgpu/wgsl`](https://www.npmjs.com/package/@vgpu/wgsl) `^0.4.0` |
+| Source | <https://github.com/vercel-labs/vgpu> · docs <https://vgpu.sh> |
+| Licence | MIT (Vercel, Inc.) — the copy that must travel with the vendored code is `src/lib/glass/LICENSE` |
+| Vendored example | vgpu's `glass-fractal`, in `src/lib/glass/` — see that directory's `README.md` for what was changed and why |
+| Live tuning reference | <https://vgpu.sh/?debug> — where every light-mode number in `src/lib/prism/constants.ts` was read off |
+| Build wiring | `wgslVitePlugin` from `@vgpu/wgsl/loader-vite`, in `astro.config.mjs` — resolves the `.wgsl` import graph and emits each shader as a linked module string |
+| Agent skill | `.agents/skills/vgpu/SKILL.md`, pinned by `skills-lock.json` |
+
+```bash
+npx skills add vercel-labs/vgpu              # re-install the skill
+npx -y add-mcp https://vgpu.sh/api/mcp -g    # add the docs MCP server
+npm exec --no -- vgpu docs ls                # the docs for the *installed* version
+npm exec --no -- vgpu docs find "<topic, symbol or error code>"
+```
+
+Treat the docs bundled with the installed package as the authority, not the
+hosted ones — they track the version the code is written against.
+
+### The binary assets
+
+Everything served. Paths are relative to the site root; prefix them through
+`withBase()` (`src/lib/base.ts`) so they resolve on both the apex domain and the
+GitHub Pages mirror.
+
+| Served path | Repo path | Size | What it is |
+|---|---|---|---|
+| `/glass/wall-material.png` | `public/glass/` | 816K | **The plaster texture.** 512², channel-packed: `r` = albedo variation, `g`/`b` = tangent-space normal XY, `a` = roughness. Two-octave tileable fbm plus ~220 tapered directional scratches. |
+| `/prism/wall-global-light-mask.webp` | `public/prism/` | 16K | **The window.** vgpu's authored light mask; its `r` channel is the pool of window light falling on the wall. The only file the light pipeline fetches — if it fails, the bake falls back to vgpu's procedural window pools, so the wall is never flat. |
+| `/glass/studio-cubemap-prefiltered.png` | `public/glass/` | 68K | **What the glass reflects.** A 3×2 cube cross with a prefiltered mip pyramid — the studio environment behind every highlight on the solid. |
+| `/glass/rounded-tetrahedron.mesh` | `public/glass/` | 8K | **The glass solid itself**, in vgpu's HGP2 format. |
+| `/glass/fractal-tetrahedron-l7.mesh` | `public/glass/` | 1.1M | vgpu's level-7 fractal geometry. **Held at full sphere morph, this is the orb.** |
+| `/glass/models/chronovoxel.mesh` | `public/glass/models/` | 104K | The tesseract inside the glass |
+| `/glass/models/drone.mesh` | `public/glass/models/` | 870K | |
+| `/glass/models/robot.mesh` | `public/glass/models/` | 1.6M | |
+| `/glass/models/manipulator.mesh` | `public/glass/models/` | 1.9M | |
+
+**Not served** — sources and sidecars:
+
+| Path | Size | What |
+|---|---|---|
+| `assets/models/dark_tesseract.glb` | 240K | Spline export, source for `chronovoxel.mesh` |
+| `assets/models/drone.glb` | 1.1M | |
+| `assets/models/nexbot_robot_character_concept.glb` | 2.8M | source for `robot.mesh` |
+| `assets/models/robot_arm.glb` | 3.4M | source for `manipulator.mesh` |
+| `src/lib/glass/model-rigs.json` | — | the joints read out of each GLB, for posing parts at runtime (`src/lib/prism/rig.ts`) |
+| `src/lib/glass/model-clips.json` | — | authored animation, thinned to the keys the curve needs (the tesseract's nine nested shells) |
+
+> **Licence check before you carry these across.** The vgpu code and its own
+> assets are MIT. The GLB exports in `assets/models/` are third-party model
+> assets and are *not* covered by that — confirm each one's terms before
+> shipping it in another product.
+
+### Baked on the GPU at start-up, not shipped
+
+`src/lib/prism/assets.ts` bakes these on first frame, exactly as vgpu does. They
+are the reason the asset list above is as short as it is:
+
+| Bake | Size | Contents |
+|---|---|---|
+| Wall material | 512² | albedo / tangent-normal XY / roughness |
+| Wall lighting | 512² | `r` the authored window mask, `g`/`b` the prism's contact shadow and ambient occlusion |
+| Caustic profile | 1024×256 | distance × wavelength — the filaments inside the fan |
+| Studio | 1024×512 | equirectangular HDR with a prefiltered mip pyramid |
+
+### The shaders, by the effect they produce
+
+All WGSL. `src/lib/prism/` is the light pipeline (ours, ported from vgpu's);
+`src/lib/glass/` is the vendored glass-fractal example.
+
+| Effect | Files |
+|---|---|
+| **Textured plaster wall** | `prism/wall.wgsl`, `wall-common.wgsl`, `wall-normal.wgsl`, `wall-presented.wgsl`, `bake-wall-material.wgsl` — plus `glass/hero-wall.wgsl`, the same shading ported into the glass example, and `glass/hero-fractal-background-draw.wgsl` which samples it |
+| **Window glow / light pool** | `prism/bake-wall-lighting.wgsl`, `bake-common.wgsl`, with `/prism/wall-global-light-mask.webp` as the authored mask |
+| **Cast shadow and contact occlusion** | `prism/shadow.wgsl`, `glass-grounding.wgsl`, `bake-wall-lighting.wgsl` (the `g`/`b` channels) |
+| **The glass** | `glass/hero-glass.wgsl`, `hero-glass-transmission.wgsl`, `hero-glass-environment.wgsl`, `hero-glass-face-caustic.wgsl`; the prism variant is `prism/glass.wgsl`, `glass-back.wgsl`, `glass-common.wgsl`, `glass-accent.wgsl` |
+| **The orb, and the shapes it morphs to** | `glass/hero-fractal-mesh.wgsl`, `hero-fractal-core.wgsl`, `hero-fractal-ceramic.wgsl`, `hero-fractal.wgsl`, `hero-fractal-sdf.wgsl`, `hero-fractal-present.wgsl` |
+| **Light inside the glass** (the tesseract's lamp) | `glass/hero-core-light.wgsl` |
+| **Caustic pooling inside the shadow** | `prism/hero-caustic.wgsl` — an analytic solve in the wall plane, two wavelengths rather than vgpu's 128 |
+| **The full spectral beam** (coming-soon pages) | `prism/caustic.wgsl`, `spectral.wgsl`, `light-vertex.wgsl`, `beam-reveal.wgsl`, `optics.ts`, `light-mesh.ts`; the example's own is `glass/hero-prism-caustic.wgsl` |
+| **Tone mapping and present** | `prism/tone-mapping.wgsl`, `present.wgsl`, `copy-linear.wgsl`, `color.wgsl` |
+
+Composition of the two pipelines is `src/lib/prism/hero-renderer.ts`; the
+interior registry — what is held inside the glass, and the morph between shapes
+— is `src/lib/prism/interior.ts` with `src/lib/glass/models.ts`.
+
+### The numbers that make it this room
+
+All in `src/lib/prism/constants.ts` and `src/lib/glass/settings.ts`.
+
+```js
+PRISM_WALL_COLOR          = "#d2ccc2"   // identical to --wall. They must not drift.
+PRISM_WALL_LIGHT_DIRECTION= [-0.48, 0.56, 0.68]   // to the key: up, left, out of the wall
+PRISM_WALL_TUNING         = { normalStrength: 0.22, microNormalFrequency: 7,
+                              microNormalStrength: 1.05, ambient: 0.5,
+                              materialScale: 2.4 }
+PYRAMID_SHADOW            = { opacity: 0.24, color: [0.04, 0.037, 0.033],
+                              nearPenumbra: 0.05·edge, farPenumbra: 0.26·edge }
+PYRAMID_CAUSTIC           = { color: [1, 0.965, 0.9], strength: 0.18, focus: 0.46 }
+```
+
+Two separate lights, and they are easy to confuse. `PRISM_WALL_LIGHT_DIRECTION`
+is the vector *to* the key that rakes across the plaster's tooth — up, to the
+left, and out of the wall toward the viewer — so it decides which side of every
+scratch and bump catches. The broad pool of window light is not this: it is the
+authored mask in `wall-global-light-mask.webp`, and it is what the CSS radial
+in §2 stands in for.
+
+The shadow is **warm and light** — `[0.04, 0.037, 0.033]` at 24% — because clear
+glass does not stop light; most of what the silhouette covers arrives anyway,
+just somewhere else. That is the same reasoning as the CSS
+`rgb(60 48 34 / …)` shadows in §5: on this wall, nothing casts a neutral shadow.
+
+**The glass** (`HERO_FRACTAL_GLASS`):
+
+```js
+ior: 1.149, reflectionStrength: 0.71, backOpacity: 0.19,
+absorption: [74/255, 74/255, 74/255], frostRadius: 1.8,
+dispersion: 0.025, iridescenceStrength: 0.04, iridescenceFrequency: 2,
+environmentRotation: [0, -36, 0], sphereMix: 1   // the page opens on the orb
+```
+
+**Why the orb reads black.** Its material is nominally white:
+
+```js
+HERO_ORB_MATERIAL = { baseColor: [1,1,1], roughness: 0.25,
+                      diffuseStrength: 0.08, specularStrength: 1.6,
+                      ambientStrength: 0 }
+```
+
+There is no ambient term and almost no diffuse — so the body takes essentially
+no fill light, and everything you see on it is the studio cubemap's specular
+response at 1.6, seen through glass that absorbs at `74/255`. It is not a black
+object; it is a white object lit only by its own highlights. That is worth
+knowing before you try to "fix" it by darkening `baseColor`, which flattens it
+instead. The fractal it morphs from is the dark ceramic
+(`HERO_FRACTAL_MATERIAL`, `baseColor: [71/255, ...]`, `ambientStrength: 0.34`).
+
+The one self-lit thing on the site is the core inside the tesseract:
+`HERO_GLOW_MATERIAL = { color: [1, 0.965, 0.925], strength: 2.4 }` — white with
+the room's warmth in it, because a light inside the glass that was neutral would
+read as belonging to a different scene.
+
+### Regenerating and checking
+
+```bash
+npm run check:shaders                      # device-backed validation, all 30 entries
+                                           # (npm run build runs this first)
+npx vgpu install-software-renderer         # CPU renderer — runners with no GPU; CI uses it
+npm exec --no -- vgpu check <file.wgsl> --require-validation
+
+node scripts/build-wall.mjs                # re-bake public/glass/wall-material.png
+node scripts/check-wall-color.mjs          # then re-derive the linear WALL_COLOR constant
+node scripts/build-meshes.mjs              # assets/models/*.glb → public/glass/models/*.mesh
+node scripts/inspect-glb.mjs <file.glb>    # list a Spline export's nodes before converting
+```
+
+The renderer compiles its WGSL lazily in the browser, so a shader mistake
+reaches the page as a **dead canvas rather than a build error**. That is what
+`check-shaders` exists to prevent, and why it runs before `astro build` rather
+than after. Committed mesh output is used directly by CI; the converters are not
+part of the build.
+
+### The mesh format
+
+HGP2, vgpu's format — decoded by `decodeMesh` in
+`src/lib/glass/hero-glass-assets-core.ts`, written by `scripts/build-meshes.mjs`:
+
+```
+header  40B : "HGP2", vertexCount u32, indexCount u32, stride u32 (24),
+              meshMin f32x3, meshMax f32x3
+vertex  24B : packed_position unorm16x4  xyz in [meshMin, meshMax], w = AO
+              packed_normal   snorm16x4  w = rig part index / PART_SCALE
+              packed_sphere   snorm16x4  xyz sphere target, w = orb AO
+indices     : uint16   (so: 65,535 vertices max, and meshes are decimated to fit)
+```
+
+Every mesh carries a sphere morph target at **radius 0.4966** — the radius
+vgpu's own fractal uses — which is what makes swapping one shape for another at
+full morph invisible. A new model must be built to that radius or the swap
+pops.
+
+### Taking this to a new product: three tiers
+
+**Tier 0 — CSS only.** The §2 gradient. Zero dependencies, zero assets, works
+everywhere. An empty warm wall with good type is fully on-style; most products
+should start here and stop here.
+
+**Tier 1 — CSS wall plus glass controls.** Add the `.glass-*` recipes from §5.
+Still zero assets.
+
+> Do **not** reach for `wall-material.png` as a CSS `background-image`. It is a
+> channel-packed data texture, not a picture — `g`/`b` are a normal map and `a`
+> is roughness. Dropped into CSS it renders as coloured noise.
+
+**Tier 2 — the full renderer.** Copy, in this order:
+
+1. `src/lib/glass/` (the vendored example, **including `LICENSE`**) and
+   `src/lib/prism/` (the light pipeline).
+2. `public/glass/` and `public/prism/`.
+3. `vgpu` and `@vgpu/wgsl` as dependencies; `wgslVitePlugin` in the bundler
+   config; `check-shaders` first in the build script.
+4. A component modelled on `src/components/LightPrism.astro` — the fixed canvas
+   plus the `frame` selector that names the box the object is fitted into.
+
+**Budget.** Wall, glass and the orb alone is ~2.0 MB of assets
+(`wall-material.png` 816K + `fractal-tetrahedron-l7.mesh` 1.1M + cubemap 68K +
+mask 16K + solid 8K). Every platform mesh you add is 100K–1.9M on top, fetched
+lazily — the landing page prefetches them on `requestIdleCallback` *after* the
+first shape is up, never before.
+
+**Always ship the fallback.** Feature-detect and say so, keep the CSS wall
+underneath, and never leave a silent empty canvas:
+
+```js
+if (!("gpu" in navigator)) say("This page needs WebGPU");
+renderer.ready.then(
+  () => canvas.classList.add("ready"),
+  (error) => { say("The prism could not start"); console.error(error); }
+);
+```
+
+---
+
+## 13. Starting a new product
 
 Copy these two blocks into the new project's global stylesheet. Everything above
 is elaboration on them.
@@ -615,7 +868,7 @@ Then, in order:
 4. Decide the page's object — the thing that stands in the frame. If there is no
    renderer, the object can be a single well-made piece of glass or nothing at
    all; an empty warm wall with good type is on-style. A stock illustration is
-   not.
+   not. To bring the real renderer across, work from §12.
 5. Add the rule, then the detail in 1.0625rem body at a 38rem measure.
 6. Check it at `30rem`, `48rem` and `60rem`, at reduced motion, and with a
    keyboard only.
@@ -632,17 +885,35 @@ Then, in order:
 
 ---
 
-## 13. Where this lives in the repo
+## 14. Where this lives in the repo
+
+**The 2D system**
 
 | Concern | File |
 |---|---|
 | Tokens, wall, `.clicky`, document head | `src/layouts/Base.astro` |
 | The mark | `src/components/Logo.astro` |
 | Header pill rail | `src/components/AccountActions.astro` |
-| Full-viewport wall + frame fitting | `src/components/LightPrism.astro` |
 | Landing composition, segmented rail | `src/components/Prism.astro` |
 | Split composition (copy + object) | `src/pages/signin.astro`, `src/pages/soon/[state].astro` |
-| Prose page | `src/pages/privacy.astro` |
+| Prose page | `src/pages/privacy.astro`, `src/pages/404.astro` |
 | Glass framing a third-party embed | `src/pages/book.astro` |
-| Manifest, icons, theme colour | `src/pages/site.webmanifest.ts` |
-| The renderer and its shaders | `src/lib/prism/`, `src/lib/glass/` |
+| Manifest, icons, theme colour | `src/pages/site.webmanifest.ts`, `scripts/build-icons.mjs` |
+| Base-path helper (apex vs. Pages mirror) | `src/lib/base.ts` |
+
+**The renderer** — see §12 for the full breakdown
+
+| Concern | File |
+|---|---|
+| Full-viewport wall + frame fitting | `src/components/LightPrism.astro` |
+| Composition of the two pipelines | `src/lib/prism/hero-renderer.ts` |
+| Every tunable number | `src/lib/prism/constants.ts`, `src/lib/glass/settings.ts` |
+| GPU bakes (wall, lighting, caustic, studio) | `src/lib/prism/assets.ts` |
+| What is held inside the glass | `src/lib/prism/interior.ts`, `src/lib/glass/models.ts` |
+| Posing model parts | `src/lib/prism/rig.ts`, `src/lib/glass/model-rigs.json` |
+| Light pipeline (ours) | `src/lib/prism/*.wgsl` |
+| Vendored vgpu glass-fractal + its licence | `src/lib/glass/`, `src/lib/glass/README.md`, `src/lib/glass/LICENSE` |
+| Served binary assets | `public/glass/`, `public/prism/` |
+| Model sources | `assets/models/*.glb` |
+| Asset pipeline | `scripts/build-wall.mjs`, `build-meshes.mjs`, `inspect-glb.mjs` |
+| Checks | `scripts/check-shaders.mjs`, `check-wall-color.mjs` |
