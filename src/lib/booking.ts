@@ -2,13 +2,13 @@
  * Booking a demo, on Cal.com.
  *
  * Cal.com (AGPL-3.0) is the scheduling half of this: it owns the calendar, the
- * availability, the confirmation mail and the video link. Which video link is a
- * property of the event type, not of this code — connect Cal's Google Calendar
- * app and set the event type's location to "Google Meet" and every booking
- * arrives with a Meet room on it; leave it on Cal Video and it arrives with
- * one of those. Either way there is no Google integration in this repository
- * and no Google credential anywhere near it. Self-hosting swaps one
- * environment variable.
+ * availability, the confirmation mail and the video link. The call is held on
+ * Cal Video, Cal's own room, which is what a new event type is set to — so the
+ * one company handling the booking is the one handling the meeting, and there
+ * is no Google Meet, no Zoom and no third provider in the middle of it. Which
+ * room is a property of the event type rather than of this code: changing it
+ * changes nothing in this repository. Self-hosting swaps one environment
+ * variable.
  *
  * The embed is loaded here and only here, when the booking page is opened, and
  * never on a page that merely links to it. A third-party script that runs on

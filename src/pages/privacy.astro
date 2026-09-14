@@ -85,8 +85,9 @@ const calHost = (() => {
           <p>
             We check that token before believing a word of it: the signature
             against Google's published keys, that Google issued it, that it was
-            issued to this site rather than some other one, and that it has not
-            expired. A token that fails any of those is thrown away.
+            issued to this site rather than some other one, that it answers the
+            one-time value this page generated, and that it has not expired. A
+            token that fails any of those is thrown away.
           </p>
           <p>
             It is kept in this tab's storage and nowhere else. Closing the tab
@@ -133,10 +134,16 @@ const calHost = (() => {
             What you type into it goes to Cal.com and to us: your name, your
             email address, the time you picked and anything you write in the
             notes. If you are already signed in, your name and address are
-            filled in for you and remain editable. The confirmed booking creates
-            a calendar event carrying the video link for the call; where that
-            link is a Google Meet, Google processes the invitation as it would
-            any meeting. We use it to meet you and to follow up about it.
+            filled in for you and remain editable. We use it to hold the call
+            and to follow up about it, and for nothing else.
+          </p>
+          <p>
+            The call itself is held on <strong>Cal Video</strong>, Cal.com's own
+            video room. The confirmation carries that link, and joining it needs
+            no account and no download — the meeting runs in your browser.
+            There is no Google Meet, no Zoom and no third meeting provider in
+            the middle of it: the only company handling the call is the one that
+            handled the booking.
           </p>
         </>
       ) : (
@@ -152,17 +159,15 @@ const calHost = (() => {
 
         {CAL_READY && (
           <li>
-            <strong>{calHost}</strong> — Cal.com; scheduling and confirmations.
+            <strong>{calHost}</strong> — Cal.com; scheduling, confirmations, and
+            the Cal Video room the call is held in.
           </li>
         )}
-        {(CAL_READY || SIGN_IN_READY) && (
+        {SIGN_IN_READY && (
           <li>
-            <strong>Google</strong> —
-            {SIGN_IN_READY && <> authenticates you and tells us your name and
-            email address</>}
-            {SIGN_IN_READY && CAL_READY && <>;</>}
-            {CAL_READY && <> the calendar invitation, and the Meet room it
-            carries when the meeting is held on Meet</>}.
+            <strong>Google</strong> — authenticates you and tells us your name
+            and email address. That is its whole part in this: it is not in the
+            booking, and it is not in the call.
           </li>
         )}
       </ul>

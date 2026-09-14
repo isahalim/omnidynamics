@@ -5,10 +5,10 @@
  * A mail address asks a person to compose something and then wait, which is a
  * strange thing to ask of someone who has already decided they want to see the
  * thing. A calendar asks them to pick a time. Cal.com holds the calendar, the
- * availability and the invitation; the Meet link is on the invitation because
- * the event type's location is Google Meet, not because anything here arranges
- * it. The address is still on the page, because a calendar is not the right
- * shape for every message.
+ * availability, the invitation and the room: the call is held on Cal Video, the
+ * event type's own location, so the link on the invitation is Cal's and nothing
+ * here arranges it. The address is still on the page, because a calendar is not
+ * the right shape for every message.
  *
  * The composition is the contact page's: copy in a measured column with the
  * prism fitted beside it, and the calendar on the same frosted glass every
@@ -49,9 +49,10 @@ import { withBase } from "../lib/base";
         <div class="rule" aria-hidden="true"></div>
 
         <p class="note">
-          Pick a time and the invitation arrives with the video link on it.
-          Bring what you are trying to build — early access, a partnership, or a
-          question about a platform, it is the same half hour.
+          Pick a time and the invitation arrives with a Cal Video link on it —
+          it opens in the browser, with nothing to install and no account to
+          make. Bring what you are trying to build: early access, a partnership,
+          or a question about a platform, it is the same half hour.
         </p>
 
         <p class="address">
@@ -82,8 +83,9 @@ import { withBase } from "../lib/base";
             <p>
               No calendar is connected in this build. Set
               <code>PUBLIC_CAL_LINK</code> to a Cal.com event type — hosted or
-              self-hosted, it is AGPL — with its location set to Google Meet,
-              and this page becomes the booking form.
+              self-hosted, it is AGPL — and this page becomes the booking form.
+              A new event type is on Cal Video already, so there is no meeting
+              provider to connect.
             </p>
             <p>
               Until then: <a href={`mailto:${EMAIL}`}>{EMAIL}</a>.
