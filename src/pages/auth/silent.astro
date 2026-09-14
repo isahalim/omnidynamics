@@ -1,0 +1,36 @@
+---
+/**
+ * The frame the session is renewed in.
+ *
+ * Never seen: the client loads this page in a hidden iframe with `prompt=none`,
+ * the provider answers against its own cookie without showing anything, and the
+ * result is posted back to the parent window. It is the reason tokens can be
+ * kept in memory and still survive a reload — the durable half of the session
+ * stays with the provider, where it is an `HttpOnly` cookie rather than
+ * something any script on this origin can read.
+ *
+ * It carries no markup, no styles and no other script on purpose. It runs
+ * inside a frame, and everything that loads in that frame is weight on a
+ * request whose whole job is to be invisible.
+ */
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>…</title>
+    <meta name="robots" content="noindex" />
+  </head>
+  <body>
+    <script>
+      import { client } from "../../lib/auth/session";
+
+      const oidc = client();
+      // Failure is normal here — an expired provider session answers with an
+      // error, and the parent treats that as "signed out". It must not throw
+      // into the frame's console on every quiet expiry.
+      oidc?.signinSilentCallback().catch(() => {});
+    </script>
+  </body>
+</html>

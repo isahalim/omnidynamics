@@ -1,0 +1,299 @@
+---
+/**
+ * The privacy policy.
+ *
+ * Written as a description of what the software actually does, because it was
+ * written next to the software that does it: every claim on this page can be
+ * checked against a file in this repository, and the account page shows a
+ * signed-in reader the specific values rather than the categories. If the code
+ * changes, this changes with it — a policy that drifts from the system it
+ * describes is worse than none, because people rely on it.
+ */
+import Base from "../layouts/Base.astro";
+import Logo from "../components/Logo.astro";
+import { CAL, CAL_READY, EMAIL, ISSUER_HOST, OIDC_READY, ROUTES } from "../lib/auth/config";
+import { withBase } from "../lib/base";
+
+const UPDATED = "14 September 2026";
+const calHost = (() => {
+  try {
+    return new URL(CAL.origin).host;
+  } catch {
+    return CAL.origin;
+  }
+})();
+---
+
+<Base
+  title="Privacy — OmniDynamics"
+  description="What OmniDynamics collects, who processes it, and how to get rid of it."
+>
+  <div class="page">
+    <header class="top">
+      <a class="brand clicky" href={withBase("/")}>
+        <Logo size={30} />
+        <span class="wordmark">OmniDynamics</span>
+      </a>
+      <nav class="links">
+        {OIDC_READY && <a class="clicky" href={ROUTES.account}>Your account</a>}
+        <a class="clicky" href={ROUTES.book}>Book a demo</a>
+      </nav>
+    </header>
+
+    <main>
+      <h1>Privacy</h1>
+      <p class="lede">
+        What this site collects, who else sees it, and how to get rid of it.
+      </p>
+      <p class="stamp">Last updated {UPDATED}</p>
+
+      <div class="rule" aria-hidden="true"></div>
+
+      <h2>Reading the site</h2>
+      <p>
+        Nothing is collected. There is no analytics script, no tag manager, no
+        advertising pixel and no cookie of ours on any page — the site is a set
+        of static files and a shader. Our host, Cloudflare, keeps ordinary
+        server logs of requests, including IP addresses, to serve the site and
+        keep it up; we do not build profiles from them.
+      </p>
+      <p>
+        The 3D wall runs on your own graphics hardware. It measures nothing
+        about you and sends nothing anywhere.
+      </p>
+
+      <h2>Signing in</h2>
+      {OIDC_READY ? (
+        <>
+          <p>
+            Sign-in is OpenID Connect, using the authorization code flow with
+            PKCE. You authenticate at
+            {" "}<span class="host">{ISSUER_HOST}</span>, not here. Your
+            password, one-time code or passkey never touches this site, and we
+            could not read it if we tried.
+          </p>
+          <p>
+            What comes back is an identity token containing the claims we asked
+            for: <strong>your name</strong>, <strong>your email address</strong>,
+            and the identifier your provider uses for you. Your account page
+            lists every claim actually held, including anything your provider
+            chose to add.
+          </p>
+          <p>
+            Those tokens are kept in the browser tab's memory and nowhere else.
+            Closing the tab discards them. We do not write them to
+            <code>localStorage</code>, we do not have a server that could store
+            them, and the long-lived half of the session is a cookie held by
+            your provider — not by us.
+          </p>
+          <p>
+            If you sign in to two different accounts on one browser, anything
+            cached for the first is deleted the moment the second arrives. We
+            key that cache on your provider <em>and</em> your identifier, so two
+            people with the same identifier at different providers are never the
+            same person here.
+          </p>
+        </>
+      ) : (
+        <p>
+          Sign-in is not enabled on this build of the site, so there is no
+          account, no token and nothing stored.
+        </p>
+      )}
+
+      <h2>Booking a demo</h2>
+      {CAL_READY ? (
+        <>
+          <p>
+            The booking form is <a href="https://cal.com/">Cal.com</a>, an
+            open-source scheduler, embedded from
+            {" "}<span class="host">{calHost}</span>. It loads only when you open
+            the booking page — not on any other page of this site — so nothing
+            from Cal.com runs while you are simply reading.
+          </p>
+          <p>
+            What you type into it goes to Cal.com and to us: your name, your
+            email address, the time you picked and anything you write in the
+            notes. If you are already signed in, your name and address are
+            filled in for you and remain editable. The confirmed booking creates
+            a calendar event with a Google Meet link, which means Google
+            processes the invitation as it would any meeting. We use it to meet
+            you and to follow up about it.
+          </p>
+        </>
+      ) : (
+        <p>
+          Booking is not enabled on this build. Mail sent to the address below
+          reaches us directly.
+        </p>
+      )}
+
+      <h2>Who else processes it</h2>
+      <ul class="who">
+        <li><strong>Cloudflare</strong> — serves the site; request logs.</li>
+        {OIDC_READY && (
+          <li>
+            <strong>{ISSUER_HOST}</strong> — our identity provider; holds your
+            account and authenticates you.
+          </li>
+        )}
+        {CAL_READY && (
+          <li>
+            <strong>{calHost}</strong> — Cal.com; scheduling and confirmations.
+          </li>
+        )}
+        {CAL_READY && (
+          <li>
+            <strong>Google</strong> — the calendar invitation and the Meet room
+            it carries.
+          </li>
+        )}
+      </ul>
+      <p class="thin">
+        That is the whole list. We do not sell anything to anyone, and there is
+        no fourth party you have not been told about.
+      </p>
+
+      <h2>How long</h2>
+      <p>
+        Tokens: until the tab closes. Cached page state: until you sign out, or
+        a different account signs in on that browser. Bookings and the mail
+        around them: kept while we are in touch, and deleted on request.
+      </p>
+
+      <h2>Your say</h2>
+      <p>
+        You can see what is held, clear it, and sign out from
+        {OIDC_READY ? <> <a href={ROUTES.account}>your account page</a></> : <> the account page, once sign-in is enabled</>}.
+        For access, correction, export or deletion of anything beyond the
+        browser — a booking, a thread of mail, the account itself — write to
+        {" "}<a href={`mailto:${EMAIL}`}>{EMAIL}</a> and we will do it and tell
+        you what was removed. If you are in the UK or the EU, those are your
+        rights under the GDPR and you do not have to cite it to use them; you
+        may also complain to your data protection authority.
+      </p>
+      <p class="thin">
+        This site is not for children, and we do not knowingly collect anything
+        from anyone under 16.
+      </p>
+
+      <h2>Changes</h2>
+      <p>
+        This page is versioned alongside the code it describes. Material changes
+        move the date at the top, and anything that widens what we collect will
+        be asked for rather than announced.
+      </p>
+
+      <p class="back"><a class="clicky" href={withBase("/")}>Back to the site</a></p>
+    </main>
+  </div>
+</Base>
+
+<style>
+  .page {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    min-block-size: 100dvh;
+    max-inline-size: 48rem;
+    margin-inline: auto;
+    padding: clamp(1rem, 2.5vw, 1.75rem) clamp(1.25rem, 4vw, 2.5rem)
+      clamp(3rem, 8vh, 5rem);
+    color: var(--on-wall);
+  }
+
+  .top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-block-end: clamp(2rem, 6vh, 3.5rem);
+  }
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    text-decoration: none;
+    color: inherit;
+    border-radius: 999px;
+  }
+  .wordmark { font-size: 1rem; font-weight: 500; letter-spacing: -0.01em; }
+  .links { display: flex; gap: clamp(1rem, 2.5vw, 2rem); font-size: 0.9375rem; }
+  .links a { color: inherit; text-decoration: none; opacity: 0.62; transition: opacity 0.2s ease; }
+  .links a:hover { opacity: 1; }
+
+  h1 {
+    margin: 0;
+    font-family: ui-serif, Georgia, "Iowan Old Style", "Times New Roman", serif;
+    font-weight: 400;
+    font-size: clamp(3rem, 9vw, 5.5rem);
+    line-height: 0.9;
+    letter-spacing: -0.02em;
+  }
+
+  .lede {
+    margin: clamp(0.9rem, 2.5vh, 1.4rem) 0 0;
+    font-size: clamp(1.15rem, 2.2vw, 1.5rem);
+    line-height: 1.3;
+    font-weight: 300;
+    letter-spacing: -0.015em;
+  }
+
+  .stamp {
+    margin: 0.65rem 0 0;
+    font-size: 0.8125rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .rule {
+    inline-size: min(100%, 22rem);
+    block-size: 1px;
+    margin-block: clamp(1.5rem, 4vh, 2.5rem);
+    background: currentColor;
+    opacity: 0.28;
+  }
+
+  h2 {
+    margin: clamp(2rem, 5vh, 2.75rem) 0 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  p {
+    margin: 0 0 0.9rem;
+    font-size: 1.0625rem;
+    line-height: 1.62;
+    max-inline-size: 38rem;
+  }
+  p:last-of-type { margin-block-end: 0; }
+  .thin { font-size: 0.9375rem; color: var(--muted); }
+
+  a { color: inherit; text-underline-offset: 0.22em; }
+  .host, strong { color: var(--ink); font-weight: 600; }
+  code {
+    font-size: 0.85em;
+    padding: 0.1em 0.35em;
+    border-radius: 0.35em;
+    background: rgb(60 48 34 / 0.08);
+  }
+
+  .who {
+    margin: 0 0 0.9rem;
+    padding-inline-start: 1.1rem;
+    display: grid;
+    gap: 0.5rem;
+    font-size: 1rem;
+    line-height: 1.55;
+  }
+
+  .back {
+    margin-block-start: clamp(2.5rem, 7vh, 4rem);
+    font-size: 0.9375rem;
+  }
+</style>

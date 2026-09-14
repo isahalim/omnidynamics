@@ -1,0 +1,153 @@
+---
+/**
+ * The pair at the top right of every page: the way in, and the way to talk to
+ * someone. They sit in one frosted group — the same glass the platform picker
+ * is cut from — so the header reads as a single control rather than two links
+ * that happen to be next to each other.
+ *
+ * "Sign in" is a plain link to a page, not a button that does something on
+ * click: the flow it starts is a full-page redirect to another origin, and a
+ * link is the honest shape for that. It is swapped for the person's own name
+ * once the session is picked up, which happens after paint and must not move
+ * anything around it when it does.
+ */
+import { OIDC_READY, ROUTES } from "../lib/auth/config";
+
+interface Props {
+  /** Where to come back to after signing in. Defaults to the current page. */
+  returnTo?: string;
+}
+const { returnTo } = Astro.props;
+const backTo = returnTo ?? Astro.url.pathname;
+---
+
+<div class="actions">
+  {OIDC_READY && (
+    <>
+      <a class="ghost clicky" href={`${ROUTES.signIn}?next=${encodeURIComponent(backTo)}`} data-signin>
+        Sign in
+      </a>
+      {/* Rendered empty and hidden: there is no session on the server, and a
+          name that arrives late should slot into a space that was already the
+          right size rather than shove the demo button sideways. */}
+      <a class="who clicky" href={ROUTES.account} data-account hidden>
+        <span class="pip" aria-hidden="true"></span>
+        <span class="name" data-account-name></span>
+      </a>
+    </>
+  )}
+
+  <a class="solid clicky" href={ROUTES.book}>
+    <span>Book a demo</span>
+    <svg viewBox="0 0 20 20" aria-hidden="true" class="arrow">
+      <path d="M4 10h11m0 0-4.2-4.2M15 10l-4.2 4.2" fill="none" stroke="currentColor"
+        stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  </a>
+</div>
+
+<style>
+  .actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.3rem;
+    border-radius: 999px;
+    background: rgb(255 255 255 / 0.5);
+    backdrop-filter: blur(14px) saturate(170%);
+    -webkit-backdrop-filter: blur(14px) saturate(170%);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.9),
+      0 1px 2px rgb(60 48 34 / 0.1),
+      0 12px 28px -16px rgb(60 48 34 / 0.45);
+  }
+
+  .ghost,
+  .who,
+  .solid {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.6rem 1.15rem;
+    border-radius: 999px;
+    font-size: 0.875rem;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .ghost {
+    color: var(--muted);
+    transition: color 0.2s ease, background-color 0.2s ease;
+  }
+  .ghost:hover { color: var(--ink); background: rgb(255 255 255 / 0.6); }
+
+  .who {
+    max-inline-size: 12rem;
+    color: var(--ink);
+    background: rgb(255 255 255 / 0.6);
+  }
+  .who .name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* A signed-in session, stated once, in the one place it belongs. */
+  .pip {
+    inline-size: 0.4rem;
+    block-size: 0.4rem;
+    border-radius: 999px;
+    background: #2f7d4f;
+    flex: none;
+  }
+
+  .solid {
+    color: var(--wall);
+    background: var(--ink);
+    box-shadow: 0 1px 2px rgb(60 48 34 / 0.2), 0 8px 18px -10px rgb(20 18 15 / 0.8);
+  }
+  .solid:hover { background: #241f19; }
+
+  .arrow {
+    inline-size: 1.05rem;
+    block-size: 1.05rem;
+    transition: translate 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .solid:hover .arrow { translate: 2px 0; }
+
+  /* On a phone the group keeps the demo and drops the word beside the mark. */
+  @media (max-width: 30rem) {
+    .ghost, .who, .solid { padding-inline: 0.9rem; }
+    .who { max-inline-size: 7rem; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .arrow, .ghost { transition: none; }
+    .solid:hover .arrow { translate: none; }
+  }
+</style>
+
+<script>
+  import { OIDC_READY } from "../lib/auth/config";
+
+  // This component is in the header of every page, and the protocol client is
+  // the largest thing the site would otherwise download. Asked for here rather
+  // than imported at the top, it is fetched only on a build that has a provider
+  // — and even then, after the page the reader came for.
+  if (OIDC_READY) {
+    const { observe, restore } = await import("../lib/auth/session");
+    const signIn = document.querySelector<HTMLElement>("[data-signin]");
+    const account = document.querySelector<HTMLElement>("[data-account]");
+    const name = document.querySelector<HTMLElement>("[data-account-name]");
+
+    if (signIn && account && name) {
+      observe((who) => {
+        signIn.hidden = who !== null;
+        account.hidden = who === null;
+        name.textContent = who?.name ?? "";
+      });
+      // Asks the provider whether this browser still has a session. Nothing
+      // waits on it: the header is already correct for a signed-out reader.
+      void restore();
+    }
+  }
+</script>

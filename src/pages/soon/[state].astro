@@ -2,7 +2,9 @@
 import Base from "../../layouts/Base.astro";
 import Logo from "../../components/Logo.astro";
 import LightPrism from "../../components/LightPrism.astro";
+import AccountActions from "../../components/AccountActions.astro";
 import { PRISM_STATES } from "../../lib/glass/models";
+import { ROUTES } from "../../lib/auth/config";
 import { withBase } from "../../lib/base";
 
 export function getStaticPaths() {
@@ -21,10 +23,11 @@ const HEADLINE: Record<string, readonly [string, string]> = {
   robot: ["The humanoid for human", "spaces, coming soon."],
 };
 
+/** What it is, and the half of the line that is the way to ask about it. */
 const BLURB: Record<string, string> = {
-  drone: "Flight stack, perception and fleet control — talk to us about early access",
-  manipulator: "Repeatable industrial motion — talk to us about early access",
-  robot: "Built for human-shaped environments — talk to us about early access",
+  drone: "Flight stack, perception and fleet control",
+  manipulator: "Repeatable industrial motion",
+  robot: "Built for human-shaped environments",
 };
 
 const platforms = PRISM_STATES.filter((entry) => entry.soon);
@@ -45,7 +48,8 @@ const headline = HEADLINE[state.id]!;
       </a>
       <nav class="links">
         <a class="clicky" href={withBase("/")}>Tools</a>
-        <a class="clicky" href="mailto:suzan@omnidynamics.dev">Contact</a>
+        <a class="clicky" href={ROUTES.privacy}>Privacy</a>
+        <AccountActions />
       </nav>
     </header>
 
@@ -77,7 +81,8 @@ const headline = HEADLINE[state.id]!;
         <div class="rule" aria-hidden="true"></div>
 
         <p class="note">
-          <a class="clicky" href="mailto:suzan@omnidynamics.dev">{BLURB[state.id]}</a>
+          {BLURB[state.id]} — <a class="clicky" href={ROUTES.book}>book a demo
+          for early access</a>
         </p>
       </div>
 
@@ -125,7 +130,8 @@ const headline = HEADLINE[state.id]!;
 
   .links {
     display: flex;
-    gap: clamp(1rem, 2.5vw, 2rem);
+    align-items: center;
+    gap: clamp(0.75rem, 2vw, 1.5rem);
     font-size: 0.9375rem;
   }
   .links a {
