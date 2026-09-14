@@ -39,17 +39,17 @@ export const PRISM_STATES: readonly PrismStateInfo[] = [
   },
   {
     id: "chronovoxel",
-    // Nowhere to send you yet, so it has its say here rather than on a page
-    // of its own.
+    // The one platform you can go and read today, so the tesseract is a door
+    // rather than a promise: it leads to the work itself, written up.
     label: "ChronoVoxel",
-    href: null,
+    href: "https://isahalim.github.io/Embodied-XAI-Is-All-You-Need/",
     blurb:
       "A model-agnostic tool and evaluation harness that turns a physical AI " +
       "agent's fleeting, frame-by-frame attention into one persistent, " +
       "queryable 4D record — accumulating, comparing, and replaying why " +
       "multimodal VLM/LLM systems chose what they chose, from raw pixels to a " +
       "certifiable heat field in the world.",
-    hint: "Coming soon",
+    hint: "Click the tesseract to read it",
   },
   {
     id: "drone",

@@ -1,0 +1,176 @@
+# The whole sign-in, declared.
+#
+# authentik discovers every `*.yaml` under /blueprints and applies it, so this
+# file — not a sequence of clicks in the admin interface — is what the running
+# instance is. Re-applying it is idempotent: entries are matched by their
+# `identifiers` and updated in place, and only the fields named in `attrs` are
+# touched, so nothing set elsewhere is clobbered.
+#
+# Two secrets are read from the environment rather than written here, because
+# this file is in git and they are the one pair in the system that genuinely
+# cannot be: Google's client id and client secret. See ../README.md.
+version: 1
+metadata:
+  name: OmniDynamics — sign-in
+  labels:
+    blueprints.goauthentik.io/description: |
+      The omnidynamics application and its public OAuth client, Google as a
+      federated source, and the flow that walks straight out to Google.
+
+context:
+  # `!Env [NAME, default]`. Empty is a legal state, and the five Google entries
+  # below carry a `conditions:` that skips them when it is — an authentik with
+  # no Google credentials still runs, still serves the application, and simply
+  # has no Google button, rather than half-declaring a source that would fail
+  # on the far side of a redirect.
+  google_client_id: !Env [GOOGLE_CLIENT_ID, ""]
+  google_client_secret: !Env [GOOGLE_CLIENT_SECRET, ""]
+  google_configured: !Condition
+    - AND
+    - !Env [GOOGLE_CLIENT_ID, ""]
+    - !Env [GOOGLE_CLIENT_SECRET, ""]
+  client_id: !Env [OMNIDYNAMICS_CLIENT_ID, ""]
+
+entries:
+  # ── Google, federated ──────────────────────────────────────────────────────
+  # The site never sees a Google token. Google authenticates the person to
+  # authentik; authentik issues the id token the site validates. One protocol
+  # at the door, whatever the person signed in with behind it.
+  - id: google
+    model: authentik_sources_oauth.oauthsource
+    conditions: [!Context google_configured]
+    identifiers:
+      slug: google
+    attrs:
+      name: Google
+      provider_type: google
+      # The slug is load-bearing: Google's console must have
+      # <authentik>/source/oauth/callback/google/ registered as the redirect
+      # URI, and that path is built from it.
+      consumer_key: !Context google_client_id
+      consumer_secret: !Context google_client_secret
+      enabled: true
+      # A person who already has an account here and then arrives via Google is
+      # the same person, not a second one. Safe only because the match is on an
+      # address Google itself asserts and verifies; on a source that let anyone
+      # type any address this setting would be an account takeover.
+      user_matching_mode: email_link
+      user_path_template: "goauthentik.io/sources/%(slug)s"
+      authentication_flow: !Find [authentik_flows.flow, [slug, default-source-authentication]]
+      enrollment_flow: !Find [authentik_flows.flow, [slug, default-source-enrollment]]
+
+  # Show it on authentik's own login screen too, next to the password field, so
+  # the deep link below is a shortcut rather than the only way through.
+  - model: authentik_stages_identification.identificationstage
+    conditions: [!Context google_configured]
+    identifiers:
+      name: default-authentication-identification
+    attrs:
+      # Naming the built-in alongside Google is not decoration: this field
+      # replaces the list rather than adding to it, and dropping the built-in
+      # would take the password login with it.
+      sources:
+        - !Find [authentik_core.source, [slug, authentik-built-in]]
+        - !KeyOf google
+      show_source_labels: true
+
+  # ── "Continue with Google", as one navigation ──────────────────────────────
+  # authentik has no `kc_idp_hint`: an authorization request cannot name the
+  # upstream identity it wants, so the way to skip the "pick one" screen is a
+  # flow whose only stage is a redirect to the source. The site sends people to
+  #
+  #   /if/flow/google/?next=<relative authorize url>
+  #
+  # The executor stores that `next`, the stage bounces the browser to Google,
+  # and when Google returns, the source's flow manager reads the stored `next`
+  # back out and finishes the authorization it interrupted.
+  - id: to-google
+    model: authentik_stages_redirect.redirectstage
+    conditions: [!Context google_configured]
+    identifiers:
+      name: omnidynamics-continue-with-google
+    attrs:
+      mode: static
+      target_static: /source/oauth/login/google/
+      keep_context: true
+
+  - id: google-flow
+    model: authentik_flows.flow
+    conditions: [!Context google_configured]
+    identifiers:
+      slug: google
+    attrs:
+      name: Continue with Google
+      title: Continue with Google
+      designation: authentication
+      # Anonymous by definition — this is the flow that authenticates them.
+      authentication: none
+      layout: stacked
+      # Reached with no authorization in flight (a bookmark, a stale tab) the
+      # flow has nowhere to send anyone; say so rather than loop.
+      denied_action: message_continue
+
+  - model: authentik_flows.flowstagebinding
+    conditions: [!Context google_configured]
+    identifiers:
+      target: !KeyOf google-flow
+      stage: !KeyOf to-google
+      order: 0
+    attrs:
+      evaluate_on_plan: true
+      re_evaluate_policies: false
+
+  # ── The site, as an OAuth client ───────────────────────────────────────────
+  - id: provider
+    model: authentik_providers_oauth2.oauth2provider
+    identifiers:
+      name: omnidynamics
+    attrs:
+      client_type: public
+      client_id: !Context client_id
+      # OAuth 2.1, and nothing older. The defaults hand a new provider every
+      # grant type authentik implements, including implicit and the password
+      # grant; a public client that ships to a browser must have neither.
+      grant_types:
+        - authorization_code
+        - refresh_token
+      # Exact strings, and one set per origin the build is served from: the dev
+      # server, the apex domain, and the GitHub Pages mirror whose paths carry
+      # the repository name.
+      redirect_uris:
+        - { matching_mode: strict, url: "http://localhost:4321/auth/callback/" }
+        - { matching_mode: strict, url: "http://localhost:4321/auth/silent/" }
+        - { matching_mode: strict, url: "http://localhost:4321/", redirect_uri_type: logout }
+        - { matching_mode: strict, url: "https://omnidynamics.dev/auth/callback/" }
+        - { matching_mode: strict, url: "https://omnidynamics.dev/auth/silent/" }
+        - { matching_mode: strict, url: "https://omnidynamics.dev/", redirect_uri_type: logout }
+        - { matching_mode: strict, url: "https://isahalim.github.io/omnidynamics/auth/callback/" }
+        - { matching_mode: strict, url: "https://isahalim.github.io/omnidynamics/auth/silent/" }
+        - { matching_mode: strict, url: "https://isahalim.github.io/omnidynamics/", redirect_uri_type: logout }
+      # A pairwise-ish subject: the site is told a stable id for the person that
+      # is not their authentik primary key.
+      sub_mode: hashed_user_id
+      include_claims_in_id_token: true
+      access_code_validity: minutes=1
+      access_token_validity: minutes=5
+      refresh_token_validity: days=30
+      issuer_mode: per_provider
+      signing_key: !Find [authentik_crypto.certificatekeypair, [name, authentik Self-signed Certificate]]
+      authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-explicit-consent]]
+      invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+      # Exactly the three the site asks for. A scope the provider does not
+      # advertise comes back `invalid_scope` before any login screen appears,
+      # which is the correct failure — it is also why this list is not longer.
+      property_mappings:
+        - !Find [authentik_providers_oauth2.scopemapping, [scope_name, openid]]
+        - !Find [authentik_providers_oauth2.scopemapping, [scope_name, email]]
+        - !Find [authentik_providers_oauth2.scopemapping, [scope_name, profile]]
+
+  - model: authentik_core.application
+    identifiers:
+      slug: omnidynamics
+    attrs:
+      name: OmniDynamics
+      provider: !KeyOf provider
+      meta_launch_url: https://omnidynamics.dev/
+      policy_engine_mode: any

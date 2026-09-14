@@ -48,10 +48,11 @@
 import {
   UserManager,
   WebStorageStateStore,
+  type SigninRedirectArgs,
   type StateStore,
   type User,
 } from "oidc-client-ts";
-import { IDP, OIDC, OIDC_READY, ROUTES } from "./config";
+import { FLOWS, ISSUER_ORIGIN, OIDC, OIDC_READY, ROUTES, flowReady } from "./config";
 
 /** The user store: a Map, so tokens exist only while the page does. */
 class MemoryStore implements StateStore {
@@ -93,7 +94,29 @@ export interface Account {
   readonly claims: Readonly<Record<string, unknown>>;
 }
 
-let manager: UserManager | null = null;
+/**
+ * The relying party, plus the one thing a federated button needs that the
+ * library does not expose: the authorization URL *without* leaving for it.
+ *
+ * "Continue with Google" cannot simply be this request with a parameter added —
+ * authentik has no `kc_idp_hint`, so the detour past its login screen is a flow
+ * that takes the authorization request as its `next` (see {@link FLOWS}). That
+ * means building the request, keeping it, and navigating somewhere else with it
+ * in hand. Everything else about it is unchanged and must be: the `state` and
+ * the PKCE verifier are written to storage by this call, and the callback will
+ * not accept a response without them.
+ */
+class Client extends UserManager {
+  async authorizeUrl(args: SigninRedirectArgs): Promise<string> {
+    const { url } = await this._client.createSigninRequest({
+      request_type: "si:r",
+      ...args,
+    });
+    return url;
+  }
+}
+
+let manager: Client | null = null;
 
 /** The absolute form of a route, as registered with the provider. */
 const absolute = (path: string) => new URL(path, window.location.origin).href;
@@ -103,11 +126,11 @@ const absolute = (path: string) => new URL(path, window.location.origin).href;
  * lazily, and only in the browser: it reads `window.location` for the exact
  * redirect URIs, and there is nothing for it to do while the page is a string.
  */
-export function client(): UserManager | null {
+export function client(): Client | null {
   if (!OIDC_READY || typeof window === "undefined") return null;
   if (manager) return manager;
 
-  manager = new UserManager({
+  manager = new Client({
     authority: OIDC.issuer,
     client_id: OIDC.clientId,
     scope: OIDC.scope,
@@ -260,13 +283,36 @@ export async function signIn({ email, via, returnTo, prompt }: SignInOptions = {
   const oidc = client();
   if (!oidc) throw new Error("no identity provider is configured");
 
-  const hint = via ? IDP[via] : "";
-  await oidc.signinRedirect({
+  const request: SigninRedirectArgs = {
     prompt,
     login_hint: email || undefined,
-    extraQueryParams: hint ? { [IDP.param]: hint } : undefined,
     state: safeReturn(returnTo),
-  });
+  };
+
+  const flow = via ? FLOWS[via] : "";
+  if (!flowReady(flow)) {
+    await oidc.signinRedirect(request);
+    return;
+  }
+
+  // The same authorization request, reached the long way round, so that the
+  // person lands on Google rather than on a screen asking which Google. The
+  // flow runs first and hands the request on when the upstream returns.
+  window.location.href = detour(flow, await oidc.authorizeUrl(request));
+}
+
+/**
+ * The URL of an authentik flow, carrying an authorization request to resume.
+ *
+ * `next` has to be *relative*: authentik refuses an absolute one, which is what
+ * keeps this from being an open redirect — the parameter can only ever name a
+ * path on the provider's own origin, and the only path worth naming is the
+ * authorization endpoint the library just built a request for.
+ */
+function detour(flow: string, authorize: string) {
+  const { pathname, search } = new URL(authorize);
+  const next = encodeURIComponent(pathname + search);
+  return `${ISSUER_ORIGIN}/if/flow/${encodeURIComponent(flow)}/?next=${next}`;
 }
 
 /**

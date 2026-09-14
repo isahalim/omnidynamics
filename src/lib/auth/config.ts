@@ -11,6 +11,12 @@
  * as static files, so anything it knew, its readers would know — which is why
  * the protocol it speaks is authorization code with PKCE and not one of the
  * flows that assumes a client can hold a password. See `.env.example`.
+ *
+ * The provider on the other end is authentik, self-hosted, and the whole of it
+ * is declared in `infra/authentik/` — which is the point: the names below are
+ * matched by a blueprint in that directory rather than by someone remembering
+ * what they clicked. Any certified OpenID provider would still work here; only
+ * {@link FLOWS} is shaped by authentik in particular.
  */
 import { BASE } from "../base";
 
@@ -31,31 +37,44 @@ export const OIDC = {
 export const OIDC_READY = Boolean(OIDC.issuer && OIDC.clientId);
 
 /**
- * The provider's host, for saying out loud on the sign-in page where a person
- * is about to type their password. An issuer that is not a URL is a
- * misconfiguration, but it must not take the build down with it.
+ * The provider, as a URL: its host to say out loud on the sign-in page, and its
+ * origin to hang the flow deep-links below off. An issuer that is not a URL is
+ * a misconfiguration, but it must not take the build down with it.
  */
-export const ISSUER_HOST = (() => {
+const issuerUrl = (() => {
   try {
-    return new URL(OIDC.issuer).host;
+    return new URL(OIDC.issuer);
   } catch {
-    return OIDC.issuer;
+    return null;
   }
 })();
 
+export const ISSUER_HOST = issuerUrl?.host ?? OIDC.issuer;
+export const ISSUER_ORIGIN = issuerUrl?.origin ?? "";
+
 /**
- * Which upstream identity a button asks the provider to jump to.
+ * The authentik flows that walk straight out to one federated identity.
  *
- * Google and a customer's SAML directory are federated behind the provider, not
+ * Google and a customer's SAML directory are federated *behind* authentik, not
  * integrated here: this site never sees a Google token or a SAML assertion, and
- * gets the same OIDC id token whichever way the person came in. The hint's
- * parameter name is provider-specific, so it is configuration rather than code.
+ * gets the same OIDC id token whichever way the person came in. What differs is
+ * only which door they went through, and that is where authentik is unlike
+ * Keycloak — an authorization request cannot name the upstream it wants, there
+ * is no `kc_idp_hint`. What it has instead is flows, so each of these is the
+ * slug of a flow whose one stage is a redirect to the matching source. The site
+ * sends people to it with the authorization request as `next`; authentik holds
+ * on to that and resumes it when the upstream returns.
+ *
+ * Blank is the honest default: no flow, no button. See
+ * `infra/authentik/blueprints/omnidynamics.yaml`, which declares both ends.
  */
-export const IDP = {
-  param: read(import.meta.env.PUBLIC_OIDC_IDP_PARAM) || "kc_idp_hint",
-  google: read(import.meta.env.PUBLIC_OIDC_IDP_GOOGLE),
-  sso: read(import.meta.env.PUBLIC_OIDC_IDP_SSO),
+export const FLOWS = {
+  google: read(import.meta.env.PUBLIC_OIDC_FLOW_GOOGLE),
+  sso: read(import.meta.env.PUBLIC_OIDC_FLOW_SSO),
 } as const;
+
+/** A flow deep-link can only be built when the issuer parsed. */
+export const flowReady = (flow: string) => Boolean(flow && ISSUER_ORIGIN);
 
 /**
  * The pages the protocol names. Every one of them is registered with the

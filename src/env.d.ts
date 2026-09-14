@@ -10,9 +10,8 @@ interface ImportMetaEnv {
   readonly PUBLIC_OIDC_ISSUER?: string;
   readonly PUBLIC_OIDC_CLIENT_ID?: string;
   readonly PUBLIC_OIDC_SCOPE?: string;
-  readonly PUBLIC_OIDC_IDP_PARAM?: string;
-  readonly PUBLIC_OIDC_IDP_GOOGLE?: string;
-  readonly PUBLIC_OIDC_IDP_SSO?: string;
+  readonly PUBLIC_OIDC_FLOW_GOOGLE?: string;
+  readonly PUBLIC_OIDC_FLOW_SSO?: string;
   readonly PUBLIC_CAL_LINK?: string;
   readonly PUBLIC_CAL_ORIGIN?: string;
 }

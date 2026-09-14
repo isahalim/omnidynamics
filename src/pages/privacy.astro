@@ -11,10 +11,13 @@
  */
 import Base from "../layouts/Base.astro";
 import Logo from "../components/Logo.astro";
-import { CAL, CAL_READY, EMAIL, ISSUER_HOST, OIDC_READY, ROUTES } from "../lib/auth/config";
+import { CAL, CAL_READY, EMAIL, FLOWS, ISSUER_HOST, OIDC_READY, ROUTES, flowReady } from "../lib/auth/config";
 import { withBase } from "../lib/base";
 
 const UPDATED = "14 September 2026";
+// Google is a processor only on a build where the button exists, so the page
+// discloses it on exactly those builds and not on the others.
+const googleReady = flowReady(FLOWS.google);
 const calHost = (() => {
   try {
     return new URL(CAL.origin).host;
@@ -93,6 +96,19 @@ const calHost = (() => {
             people with the same identifier at different providers are never the
             same person here.
           </p>
+          {googleReady && (
+            <p>
+              <strong>Continuing with Google</strong> adds Google to that chain,
+              and only that. Google authenticates you and tells
+              {" "}<span class="host">{ISSUER_HOST}</span> your name, your email
+              address and that the address is verified; the site itself never
+              speaks to Google, holds no Google token, and is given the same
+              identity token it would be given for any other way in. Nothing
+              about your Google account beyond those three things is asked for
+              or received, and we get no access to your mail, your files or your
+              calendar.
+            </p>
+          )}
         </>
       ) : (
         <p>
@@ -142,10 +158,13 @@ const calHost = (() => {
             <strong>{calHost}</strong> — Cal.com; scheduling and confirmations.
           </li>
         )}
-        {CAL_READY && (
+        {(CAL_READY || googleReady) && (
           <li>
-            <strong>Google</strong> — the calendar invitation, and the Meet room
-            it carries when the meeting is held on Meet.
+            <strong>Google</strong> —
+            {googleReady && <> authenticates you if you choose to sign in that way</>}
+            {googleReady && CAL_READY && <>;</>}
+            {CAL_READY && <> the calendar invitation, and the Meet room it
+            carries when the meeting is held on Meet</>}.
           </li>
         )}
       </ul>

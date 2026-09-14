@@ -13,12 +13,15 @@
 import Base from "../layouts/Base.astro";
 import Logo from "../components/Logo.astro";
 import LightPrism from "../components/LightPrism.astro";
-import { EMAIL, IDP, ISSUER_HOST, OIDC_READY, ROUTES } from "../lib/auth/config";
+import { EMAIL, FLOWS, ISSUER_HOST, OIDC_READY, ROUTES, flowReady } from "../lib/auth/config";
 import { withBase } from "../lib/base";
 
+// A button exists only when the flow behind it does. The provider declares
+// those in `infra/authentik/blueprints/omnidynamics.yaml`; this build is told
+// their slugs, and renders nothing for a door that is not there.
 const federated = {
-  google: Boolean(IDP.google),
-  sso: Boolean(IDP.sso),
+  google: flowReady(FLOWS.google),
+  sso: flowReady(FLOWS.sso),
 };
 const anyFederated = federated.google || federated.sso;
 ---
@@ -106,18 +109,22 @@ const anyFederated = federated.google || federated.sso;
                 is being made — not only in a policy nobody opens. */}
             <p class="fine">
               OmniDynamics uses OpenID Connect. You sign in at
-              {" "}<span class="issuer">{ISSUER_HOST}</span>, which tells us
-              your name and email address and nothing else. Your password never
-              reaches this site. <a href={ROUTES.privacy}>What we keep</a>.
+              {" "}<span class="issuer">{ISSUER_HOST}</span> — our own authentik,
+              on our own servers — which tells us your name and email address and
+              nothing else. Your password never reaches this site
+              {federated.google && (
+                <>, and if you use Google, Google answers to authentik rather
+                than to us</>
+              )}. <a href={ROUTES.privacy}>What we keep</a>.
             </p>
           </>
         ) : (
           <div class="unwired">
             <p>
-              Sign-in is not connected in this build. Set
-              <code>PUBLIC_OIDC_ISSUER</code> and <code>PUBLIC_OIDC_CLIENT_ID</code>
-              to any OpenID Connect provider — Zitadel, Keycloak, Authentik and
-              Ory Hydra are all free and open source — and this page becomes the
+              Sign-in is not connected in this build. Bring up the provider with
+              <code>docker compose up -d</code> in <code>infra/authentik/</code>,
+              point <code>PUBLIC_OIDC_ISSUER</code> and
+              <code>PUBLIC_OIDC_CLIENT_ID</code> at it, and this page becomes the
               door to it.
             </p>
             <p class="fine">
@@ -139,10 +146,10 @@ const anyFederated = federated.google || federated.sso;
             <span class="title">Mythos Engine</span>
             <span class="sub">Scripts, scenes and voice, from a prompt to a finished piece.</span>
           </a>
-          <a class="card clicky" href={withBase("/soon/drone/")}>
+          <a class="card clicky" href="https://isahalim.github.io/Embodied-XAI-Is-All-You-Need/">
             <span class="kicker">Early access</span>
-            <span class="title">Drone, manipulator, humanoid</span>
-            <span class="sub">Flight stack, industrial motion, and a body for human spaces.</span>
+            <span class="title">ChronoVoxel</span>
+            <span class="sub">Why a vision-language model chose what it chose, painted on the world itself.</span>
           </a>
         </div>
       </div>
