@@ -612,6 +612,7 @@ GitHub Pages mirror.
 | `/glass/models/drone.mesh` | `public/glass/models/` | 870K | |
 | `/glass/models/robot.mesh` | `public/glass/models/` | 1.6M | |
 | `/glass/models/manipulator.mesh` | `public/glass/models/` | 1.9M | |
+| `/og.jpg` | `public/` | 96K | **The share card** — a photograph of the landing page, 1200×630. See below. |
 
 **Not served** — sources and sidecars:
 
@@ -628,6 +629,36 @@ GitHub Pages mirror.
 > assets are MIT. The GLB exports in `assets/models/` are third-party model
 > assets and are *not* covered by that — confirm each one's terms before
 > shipping it in another product.
+
+### The share card is a photograph, not a drawing
+
+`public/og.jpg` is the only asset here that is a picture of the site rather than
+an input to it, and `src/layouts/Base.astro` points `og:image` at it. Without
+that tag **LinkedIn refuses to draw a card at all** — it answers "We couldn't
+generate a preview for this link", which reads like the page is down rather than
+like a tag is missing — and Slack, iMessage and X fall back to a bare link.
+`og:image:width`/`height` sit alongside it so the card can be laid out before
+the picture lands, and `twitter:card="summary_large_image"` is the one tag X
+needs to use the wide shape instead of a small square.
+
+It cannot be drawn the way the icons are. The mark is two strokes, so
+`build-icons.mjs` computes it exactly; the hero is the glass solid lit on
+plaster by a compute pass, and the only thing that knows what that looks like is
+a GPU running the shaders. `scripts/build-og.mjs` therefore drives a real
+browser at the real page, waits for `#prism.ready` — the class the renderer's
+first frame adds — lets the drift settle, and keeps the frame.
+
+**It has to be a browser with a window.** `--headless` has no WebGPU adapter on
+macOS, so the page says *"The prism could not start"* and the screenshot is a
+bare wall with the copy on it — the one picture the card must never be. The
+frame is taken at 2× and drawn down in a canvas, which also encodes the JPEG, so
+nothing in the pipeline needs a codec off npm.
+
+After re-photographing it, **bump `OG_IMAGE_VERSION` in `Base.astro`**. Every
+scraper files a card by its image URL and holds it for weeks; a new picture at
+the old address is a picture nobody sees. To make LinkedIn drop what it holds
+now, run the new URL through the
+[Post Inspector](https://www.linkedin.com/post-inspector/).
 
 ### Baked on the GPU at start-up, not shipped
 
@@ -730,6 +761,8 @@ npm exec --no -- vgpu check <file.wgsl> --require-validation
 node scripts/build-wall.mjs                # re-bake public/glass/wall-material.png
 node scripts/check-wall-color.mjs          # then re-derive the linear WALL_COLOR constant
 node scripts/build-meshes.mjs              # assets/models/*.glb → public/glass/models/*.mesh
+node scripts/build-og.mjs [url]            # re-photograph public/og.jpg (the share card);
+                                           # needs a windowed browser, then bump OG_IMAGE_VERSION
 node scripts/inspect-glb.mjs <file.glb>    # list a Spline export's nodes before converting
 ```
 
@@ -899,6 +932,7 @@ Then, in order:
 | Prose page | `src/pages/privacy.astro`, `src/pages/404.astro` |
 | Glass framing a third-party embed | `src/pages/book.astro` |
 | Manifest, icons, theme colour | `src/pages/site.webmanifest.ts`, `scripts/build-icons.mjs` |
+| Share card (Open Graph) | `public/og.jpg`, `scripts/build-og.mjs` |
 | Base-path helper (apex vs. Pages mirror) | `src/lib/base.ts` |
 
 **The renderer** — see §12 for the full breakdown
@@ -915,5 +949,5 @@ Then, in order:
 | Vendored vgpu glass-fractal + its licence | `src/lib/glass/`, `src/lib/glass/README.md`, `src/lib/glass/LICENSE` |
 | Served binary assets | `public/glass/`, `public/prism/` |
 | Model sources | `assets/models/*.glb` |
-| Asset pipeline | `scripts/build-wall.mjs`, `build-meshes.mjs`, `inspect-glb.mjs` |
+| Asset pipeline | `scripts/build-wall.mjs`, `build-meshes.mjs`, `inspect-glb.mjs`, `build-og.mjs` |
 | Checks | `scripts/check-shaders.mjs`, `check-wall-color.mjs` |

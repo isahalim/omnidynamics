@@ -14,6 +14,18 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
  * absolute path. See `src/lib/base.ts`.
  */
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+/**
+ * The card a shared link unfolds into, as an absolute URL: a scraper is not on
+ * the page and has no origin to resolve a relative address against, so a
+ * root-relative `/og.jpg` is the one asset here that has to carry the host too.
+ *
+ * `?v=` for the same reason the icons carry it, and with more teeth: LinkedIn,
+ * Slack and the rest file a card by its image URL and hold it for weeks, so a
+ * new picture at the old address is a picture nobody sees. Bump it when the
+ * landing page changes enough that the card is wrong. See `scripts/build-og.mjs`.
+ */
+const OG_IMAGE_VERSION = "1";
+const ogImage = new URL(`${base}/og.jpg?v=${OG_IMAGE_VERSION}`, Astro.site);
 ---
 
 <!doctype html>
@@ -24,10 +36,35 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
+    {/*
+      What a shared link unfolds into. The title, description and URL were here
+      already and were not enough: LinkedIn will not draw a card at all without
+      a picture to draw it around — it answers "We couldn't generate a preview
+      for this link", which reads like the page failed to load rather than like
+      a missing tag — and Slack, iMessage and X all fall back to a bare link for
+      the same reason. The dimensions go alongside so the scraper can lay the
+      card out before the image has finished arriving, and `og:image:alt` is
+      what a screen reader gets in the feed, where the page's own markup is not.
+    */}
+    <meta property="og:site_name" content="OmniDynamics" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:type" content="website" />
     <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="The OmniDynamics landing page: a glass tetrahedron on a lit plaster wall."
+    />
+    {/*
+      X reads the Open Graph tags for everything but the shape of the card, and
+      defaults to the small square one. This is the only tag that asks for the
+      wide image the picture above is cut for.
+    */}
+    <meta name="twitter:card" content="summary_large_image" />
     <meta name="theme-color" content="#d2ccc2" />
     {/*
       The mark, everywhere something asks for one. The SVG is the tab icon and
