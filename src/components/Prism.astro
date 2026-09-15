@@ -3,6 +3,14 @@ import { PRISM_STATES } from "../lib/glass/models";
 
 /** The page opens on the orb, so its copy is the copy that ships in the HTML. */
 const opening = PRISM_STATES[0]!;
+
+/**
+ * The one sentence the site is, set over the glass before anything else is.
+ * It is the page's `h1`, so it is also the sentence a crawler reads first.
+ */
+const OPENING =
+  "We deploy scalable agentic systems and platforms for evaluating " +
+  "Physical AI Agents";
 ---
 
 {/*
@@ -13,42 +21,65 @@ const opening = PRISM_STATES[0]!;
 */}
 <canvas id="prism" class="wall" aria-hidden="true"></canvas>
 
-<section class="stage">
-  {/*
-    Click surface, and the box the glass is fitted into: the renderer measures
-    it and dollies the camera until the pyramid fills it, so the shape and the
-    thing you click on are the same rectangle.
-  */}
-  <button id="prism-hit" type="button" class="hit">
-    <span class="sr-only">Open the selected platform</span>
-  </button>
+{/*
+  The runway. Nothing in it moves — the stage is pinned to the viewport for the
+  whole of it — so what the scroll buys is not travel but a dial: the opening
+  sentence off, the picker on, and the orb from the lit one to the dark one.
+  Empty until the script says otherwise, so a page without JavaScript is the
+  landing page it always was rather than two screens of nothing.
+*/}
+<div class="reel" id="prism-reel">
+  <section class="stage" id="prism-stage">
+    {/*
+      Click surface, and the box the glass is fitted into: the renderer measures
+      it and dollies the camera until the pyramid fills it, so the shape and the
+      thing you click on are the same rectangle.
+    */}
+    <button id="prism-hit" type="button" class="hit">
+      <span class="sr-only">Open the selected system</span>
+    </button>
 
-  <p id="prism-status" class="status" role="status" aria-live="polite"></p>
+    <p id="prism-status" class="status" role="status" aria-live="polite"></p>
 
-  {/*
-    What is in the glass, beside it. The shipped tool says what it is; the rest
-    say what a click on them does. It sits in the gutter to the left of the
-    pyramid on a wide screen — the shape fills the frame by its height, so that
-    gutter is bare plaster — and drops under the shape on a narrow one.
-  */}
-  <div class="about" id="prism-about">
-    <p class="blurb" id="prism-blurb">{opening.blurb}</p>
-    <p class="hint" id="prism-hint">{opening.hint}</p>
-  </div>
+    {/*
+      What the company does, over the glass rather than beside it — the orb
+      behind it is wearing its lit material for exactly as long as this is up,
+      which is what makes black serif over a transparent solid legible.
+    */}
+    <h1 class="opening" id="prism-opening">{OPENING}</h1>
 
-  <div class="picker" role="group" aria-label="Platform">
-    {PRISM_STATES.map((state) => (
-      <button
-        type="button"
-        class="chip clicky"
-        data-state={state.id}
-        aria-pressed={state.id === "orb" ? "true" : "false"}
-      >
-        {state.label}
-      </button>
-    ))}
-  </div>
-</section>
+    {/*
+      What is in the glass, beside it. A system that has shipped says what it
+      is; the rest say what a click on them does. It sits in the gutter to the
+      left of the pyramid on a wide screen — the shape fills the frame by its
+      height, so that gutter is bare plaster — and drops under the shape on a
+      narrow one.
+    */}
+    <div class="about">
+      {/* Two opacities, on two elements, because they answer to two different
+          things: the outer one is where the scroll has got to and has to track
+          it exactly, and the inner one is the crossfade the copy is swapped
+          under. On one element the crossfade's easing lags the scroll. */}
+      <div class="copy" id="prism-copy">
+        <p class="blurb" id="prism-blurb">{opening.blurb}</p>
+        <p class="hint" id="prism-hint">{opening.hint}</p>
+      </div>
+    </div>
+
+    <div class="picker" id="prism-picker" role="group" aria-label="Systems">
+      {PRISM_STATES.map((state) => (
+        <button
+          type="button"
+          class="chip clicky"
+          data-state={state.id}
+          aria-pressed={state.id === "orb" ? "true" : "false"}
+        >
+          {state.label}
+        </button>
+      ))}
+    </div>
+  </section>
+</div>
 
 <style>
   .wall {
@@ -68,6 +99,13 @@ const opening = PRISM_STATES[0]!;
   /* Until the GPU wall is up, the body's flat plaster colour stands in. */
   .wall.ready { opacity: 1; }
 
+  /* Without the script this is the frame the stage has always filled. */
+  .reel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+
   .stage {
     position: relative;
     z-index: 2;
@@ -79,6 +117,22 @@ const opening = PRISM_STATES[0]!;
     min-block-size: clamp(22rem, 66vh, 46rem);
   }
 
+  /* With it, the runway is two screens tall and the stage is pinned under the
+     header for all of them. `--top-band` is the header's own height, measured
+     on the page (see `src/pages/index.astro`), so the pyramid keeps the frame
+     it had rather than sliding up behind the brand. */
+  .reel.reeling {
+    flex: none;
+    display: block;
+    block-size: 200dvh;
+  }
+  .reel.reeling .stage {
+    position: sticky;
+    inset-block-start: var(--top-band, 5.5rem);
+    block-size: calc(100dvh - var(--top-band, 5.5rem));
+    min-block-size: 0;
+  }
+
   /* The box the glass is fitted into: the renderer dollies the camera until the
      pyramid fills this rectangle, so this is the shape's size on the page, and
      the wall's shadow, contact bake and caustic pool come with it. It is sized
@@ -86,11 +140,14 @@ const opening = PRISM_STATES[0]!;
      to sit politely in the middle of it. */
   .hit {
     grid-row: 1;
+    grid-column: 1;
     place-self: center;
-    /* A finger turns the shape, so a drag across it must not be read as a
-       scroll. Only the shape's own box takes the gesture — on a small phone the
-       page may still need to scroll, and pinch is left alone everywhere. */
-    touch-action: pinch-zoom;
+    /* A finger turns the shape, and the page under it scrolls: the drag is
+       read horizontally and the browser keeps the vertical axis, because this
+       box is most of the screen and a page that cannot be scrolled from its
+       largest element is a page that cannot be scrolled. Pinch is left alone
+       everywhere. */
+    touch-action: pan-y pinch-zoom;
     inline-size: min(54rem, 68vw);
     block-size: min(54rem, 70vh);
     border: 0;
@@ -100,7 +157,7 @@ const opening = PRISM_STATES[0]!;
     cursor: pointer;
   }
 
-  /* A phone has no width to spare, and the platform inside the glass is the
+  /* A phone has no width to spare, and the system inside the glass is the
      whole point of the page — so the pyramid takes the screen. */
   @media (max-width: 48rem) {
     .hit {
@@ -128,15 +185,46 @@ const opening = PRISM_STATES[0]!;
   }
   .status.on { opacity: 1; }
 
+  /* The one display serif on the page, laid over the whole stage rather than
+     given a band of its own: the glass is what it is set on, and the lit orb
+     inside it is the brightest thing behind any of it. `--opening` is the
+     scroll, and it is 0 by default so that a page whose script never ran shows
+     the landing composition it always did. */
+  .opening {
+    /* The shape's own cell, so the sentence centres on the glass rather than on
+       the stage — the picker's row is below both. Every item in this grid names
+       its column, because an item placed by row alone is put in the first
+       column with room for it, and two of them in one row is how the grid grows
+       a second column nobody asked for and the composition slides sideways. */
+    grid-row: 1;
+    grid-column: 1;
+    place-self: center;
+    margin: 0;
+    max-inline-size: min(52rem, 92%);
+    text-align: center;
+    font-family: ui-serif, Georgia, "Iowan Old Style", "Times New Roman", serif;
+    font-weight: 400;
+    font-size: clamp(1.85rem, 5.1vw, 4rem);
+    line-height: 0.98;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    opacity: var(--opening, 0);
+    /* It is a title card over a click surface, never a lid on it. */
+    pointer-events: none;
+  }
+
   .about {
     grid-row: 2;
+    grid-column: 1;
     justify-self: center;
     max-inline-size: 32rem;
     margin: 0;
     text-align: center;
-    transition: opacity 0.24s ease;
+    opacity: var(--handover, 1);
   }
-  .about.changing { opacity: 0; }
+
+  .copy { transition: opacity 0.24s ease; }
+  .copy.changing { opacity: 0; }
 
   .blurb {
     margin: 0;
@@ -174,6 +262,7 @@ const opening = PRISM_STATES[0]!;
 
   .picker {
     grid-row: 3;
+    grid-column: 1;
     justify-self: center;
     display: flex;
     flex-wrap: wrap;
@@ -188,7 +277,11 @@ const opening = PRISM_STATES[0]!;
       inset 0 1px 0 rgb(255 255 255 / 0.9),
       0 1px 2px rgb(60 48 34 / 0.1),
       0 12px 28px -16px rgb(60 48 34 / 0.45);
+    opacity: var(--handover, 1);
   }
+  /* `inert` is set alongside this, so nothing under the opening is reachable by
+     tab either — but a pointer gets here first and this is what stops it. */
+  .picker[inert] { pointer-events: none; }
 
   .chip {
     min-inline-size: 5rem;
@@ -219,11 +312,23 @@ const opening = PRISM_STATES[0]!;
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .wall, .status, .about { transition: none; }
+    .wall, .status, .copy { transition: none; }
   }
 </style>
 
+{/*
+  Lenis's own two rules, which have to reach `html` and so cannot be scoped.
+  The first stops a smoothed page being clipped to the viewport, the second
+  keeps an embedded frame from swallowing the wheel.
+*/}
+<style is:global>
+  html.lenis, html.lenis body { height: auto; }
+  .lenis.lenis-smooth iframe { pointer-events: none; }
+</style>
+
 <script>
+  import Lenis from "lenis";
+
   import { createHeroRenderer } from "../lib/prism/hero-renderer";
   import type { PrismInteriorId } from "../lib/prism/interior";
   import {
@@ -237,16 +342,22 @@ const opening = PRISM_STATES[0]!;
   const canvas = document.getElementById("prism") as HTMLCanvasElement | null;
   const status = document.getElementById("prism-status");
   const hit = document.getElementById("prism-hit") as HTMLButtonElement | null;
-  const about = document.getElementById("prism-about");
+  const copy = document.getElementById("prism-copy");
   const blurb = document.getElementById("prism-blurb");
   const hint = document.getElementById("prism-hint");
-  const picker = document.querySelector<HTMLElement>(".picker");
-  if (!canvas || !status || !hit || !about || !blurb || !hint || !picker) {
+  const reel = document.getElementById("prism-reel");
+  const stage = document.getElementById("prism-stage");
+  const picker = document.getElementById("prism-picker");
+  if (
+    !canvas || !status || !hit || !copy || !blurb || !hint ||
+    !reel || !stage || !picker
+  ) {
     throw new Error("prism markup missing");
   }
 
   const chips = [...picker.querySelectorAll<HTMLButtonElement>(".chip")];
   const infoFor = new Map(PRISM_STATES.map((s) => [s.id, s] as const));
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
   const say = (message: string) => {
     status.textContent = message;
@@ -256,7 +367,7 @@ const opening = PRISM_STATES[0]!;
   if (!("gpu" in navigator)) say("This page needs WebGPU");
 
   // The coming-soon pages' wall, with vgpu's glass-fractal tetrahedron standing
-  // on it and a platform held inside the glass.
+  // on it and a system held inside the glass.
   const renderer = createHeroRenderer({ canvas, frame: hit });
   let current: PrismState = "orb";
 
@@ -282,15 +393,105 @@ const opening = PRISM_STATES[0]!;
     }
   );
 
+  /* ---------------------------------------------------------------------- *
+   * The handover.
+   *
+   * The page opens on one sentence over a lit orb and ends on the picker under
+   * a dark one, and the scroll is the dial between them. Nothing travels: the
+   * stage is pinned to the viewport for the whole runway, so what a scroll
+   * moves is opacity and one material, which is why the composition never has
+   * to be laid out twice.
+   *
+   * The runway is two screens and the dial is done well before the end of it,
+   * so the landing page is settled and still for the last stretch rather than
+   * arriving exactly as the scroll runs out.
+   * ---------------------------------------------------------------------- */
+
+  /** How much of one screen the handover plays over. */
+  const HANDOVER = 0.8;
+  /**
+   * The two halves of the crossfade do not overlap: the sentence is gone by
+   * 0.46 and the landing copy does not begin until 0.54. Overlapping them puts
+   * a display serif and a paragraph over each other at half strength in the
+   * middle of the dial, which is the one frame of this that can look like a
+   * mistake. The eighth of the runway between them reads as a beat, not a gap.
+   */
+  const OPENING_OUT = 0.46;
+  const LANDING_IN = 0.54;
+
+  const smoothStep = (edge0: number, edge1: number, value: number) => {
+    const t = Math.min(1, Math.max(0, (value - edge0) / (edge1 - edge0 || 1)));
+    return t * t * (3 - 2 * t);
+  };
+
+  let progress = -1;
+
+  const settle = (next: number) => {
+    if (Math.abs(next - progress) < 0.0015) return;
+    progress = next;
+    const opening = 1 - smoothStep(0, OPENING_OUT, next);
+    const handover = smoothStep(LANDING_IN, 1, next);
+    stage.style.setProperty("--opening", opening.toFixed(4));
+    stage.style.setProperty("--handover", handover.toFixed(4));
+    // Under the opening there is nothing to press and nothing to tab to.
+    picker.toggleAttribute("inert", opening > 0.5);
+    renderer.setOrbLight(opening);
+    // The opening is the orb. The sentence is set over the glass and is legible
+    // because what is behind it is the lightest thing on the page, so coming
+    // back up to the opening brings the glass back to the orb as well — through
+    // the picker, so the pressed chip moves with it and the two never disagree.
+    if (opening > 0.5 && current !== "orb") {
+      const home = chips.find((chip) => chip.dataset.state === "orb");
+      // Not "if the picker is free": a morph is exactly when the chips are
+      // disabled, and a reset dropped there is a reset nothing comes back for,
+      // because the dial only fires on the way past. `select` takes the
+      // interruption — it claims the selection synchronously and the interior
+      // drops whatever it was already doing.
+      if (home) void select("orb", home);
+    }
+  };
+
+  /** Where the page is, as 0 at the top and 1 once the handover is done. */
+  const read = () =>
+    Math.min(1, Math.max(0, window.scrollY / Math.max(1, window.innerHeight * HANDOVER)));
+
+  const onScroll = () => settle(read());
+
+  // Lenis drives the real scroll position rather than a transform, so the
+  // sticky stage, the anchor offsets and `window.scrollY` all still mean what
+  // they say — and a reader who has asked for less motion gets the browser's
+  // own scrolling, which is the whole of what that setting is asking for.
+  let lenis: Lenis | undefined;
+  const smooth = () => {
+    if (lenis || reduceMotion.matches) return;
+    lenis = new Lenis({ autoRaf: true, lerp: 0.09, touchMultiplier: 1.6 });
+    // Its own event as well as the window's: a scroll Lenis is driving does not
+    // always reach the document as one native event per frame, and a jump made
+    // with `lenis.scrollTo` — the one the shape's own click makes — is only ever
+    // announced here.
+    lenis.on("scroll", onScroll);
+  };
+  const unsmooth = () => {
+    lenis?.destroy();
+    lenis = undefined;
+  };
+
+  /** Carries the page from the opening to the landing composition. */
+  const handOver = () => {
+    const to = window.innerHeight * HANDOVER;
+    if (lenis) lenis.scrollTo(to, { duration: 1.1 });
+    else window.scrollTo({ top: to, behavior: reduceMotion.matches ? "auto" : "smooth" });
+  };
+
   /** Swaps the copy beside the glass, fading through so it does not jump. */
   const describe = (state: PrismState) => {
     const info = infoFor.get(state);
     if (!info) return;
-    about.classList.add("changing");
+    copy.classList.add("changing");
     window.setTimeout(() => {
       blurb.textContent = info.blurb ?? "";
       hint.textContent = info.hint;
-      about.classList.remove("changing");
+      copy.classList.remove("changing");
     }, 200);
   };
 
@@ -306,7 +507,7 @@ const opening = PRISM_STATES[0]!;
       await renderer.setState(interiorFor(next) as PrismInteriorId);
     } catch (error) {
       console.error("prism state failed", error);
-      say("That platform could not load");
+      say("That system could not load");
       window.setTimeout(() => say(""), 2400);
     } finally {
       window.clearTimeout(slow);
@@ -321,10 +522,29 @@ const opening = PRISM_STATES[0]!;
     });
   }
 
+  // The runway opens only now, because the dial reaches into the picker and a
+  // page restored part-way down it would be read before there was one.
+  reel.classList.add("reeling");
+  settle(read());
+  smooth();
+  reduceMotion.addEventListener("change", () => {
+    unsmooth();
+    smooth();
+  });
+  window.addEventListener("scroll", onScroll, { passive: true });
+  // The runway is measured in screens, so a rotated phone is a new runway.
+  window.addEventListener("resize", onScroll);
+
   /**
-   * A click on the shape opens it: a tool's own site, or the coming-soon page
-   * of a platform that has one. The rest have nowhere to send you and say so
-   * beside the glass, so a click on them turns the shape and nothing else.
+   * A click on the shape opens it: a system's own site, or the coming-soon page
+   * of one that has nothing but that. The rest have nowhere to send you and say
+   * so beside the glass, so a click on them turns the shape and nothing else.
+   *
+   * Under the opening it opens nothing. The shape is most of that screen and
+   * the page has not yet said what is in it, so a tap there is someone reaching
+   * for the thing they were just shown rather than asking to leave the site —
+   * it scrolls the handover through instead, which is what they were reaching
+   * for.
    *
    * A finger dragging the shape around also ends in a click, so a pointer that
    * travelled more than a few pixels is a turn rather than a tap and is not
@@ -344,6 +564,10 @@ const opening = PRISM_STATES[0]!;
       : 0;
     pressedAt = undefined;
     if (travelled > TAP_SLOP) return;
+    if (progress < 0.5) {
+      handOver();
+      return;
+    }
     const info = infoFor.get(current);
     const destination = info?.href ?? (info?.soon ? withBase(`/soon/${current}/`) : null);
     if (destination) window.location.href = destination;
@@ -355,11 +579,21 @@ const opening = PRISM_STATES[0]!;
    * canvas — a bare wall with a working picker over it. Nothing is disposed
    * when the page is only being put aside; it is woken instead, and disposed
    * for real only when the page is actually going away.
+   *
+   * The scroll position comes back with it, and the dial has to be read off it
+   * again: the browser restores where the page was, not which orb was in the
+   * glass when it left.
    */
   window.addEventListener("pagehide", (event) => {
-    if (!event.persisted) renderer.dispose();
+    if (!event.persisted) {
+      unsmooth();
+      renderer.dispose();
+    }
   });
   window.addEventListener("pageshow", (event) => {
-    if (event.persisted) renderer.resume();
+    if (!event.persisted) return;
+    renderer.resume();
+    progress = -1;
+    settle(read());
   });
 </script>

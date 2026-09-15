@@ -218,9 +218,14 @@ for the object to sit in.
 }
 ```
 
-`touch-action: pinch-zoom` on exactly that box, and nowhere else, is the rule:
-the copy beside it must stay scrollable on a phone, and pinch stays alive
-everywhere.
+`touch-action` on exactly that box, and nowhere else, is the rule: the copy
+beside it must stay scrollable on a phone, and pinch stays alive everywhere.
+Which value depends on whether the page under the object scrolls.
+
+| The page | The frame box | Why |
+|---|---|---|
+| Does not scroll | `pinch-zoom` | The drag is the object's, on both axes |
+| Scrolls (§7.1) | `pan-y pinch-zoom` | The object keeps the horizontal drag; the browser keeps the vertical, because the box is most of the screen and a page that cannot be scrolled from its largest element cannot be scrolled |
 
 ### Breakpoints
 
@@ -358,7 +363,8 @@ per view. Two competing calls to action is the house style breaking.
 ## 7. Motion
 
 Restrained, physical, and short. Nothing slides in, nothing fades up on scroll,
-and there are no scroll-triggered reveals anywhere in the system.
+and there are no scroll-triggered reveals anywhere in the system — with one
+named exception, below, which is a handover rather than a reveal.
 
 ```css
 .clicky {
@@ -394,6 +400,55 @@ the text at ~200ms, fade back. Never let text change while it is visible.
 
 Every block above is repeated inside `prefers-reduced-motion: reduce` with
 `transition: none`. That is not optional.
+
+### 7.1 The handover — the one scroll-driven thing
+
+The landing page opens on one sentence set over the object and ends on the
+object's own controls. The scroll between them is **a dial, not a journey**:
+nothing travels, nothing is revealed, and the composition is never laid out
+twice. That is what keeps it inside the rule above rather than being the
+scroll-triggered reveal the rule forbids.
+
+**The shape of it:**
+
+- A **runway** of `200dvh` exists only to give the dial somewhere to turn. The
+  page shell is otherwise unchanged.
+- The **header and the stage are both `sticky`**, so every pixel of the runway
+  shows the same frame. The stage sticks under the header at `--top-band`, a
+  custom property carrying the header's measured height — measured, because the
+  header's height is a clamp on the viewport plus a pill rail whose contents
+  depend on who is signed in.
+- The dial is **`scrollY / (0.8 × innerHeight)`**, clamped to `0…1`. It finishes
+  well before the runway runs out, so the page is settled and still for the last
+  stretch instead of arriving exactly as the scroll does.
+- What it drives is **two opacities and one material**: `--opening` on the
+  display serif, `--handover` on the copy and the control rail, and the object's
+  own material, from its lit variant to its dark one (§12).
+- The two opacities **cross rather than overlap**: the opening is out by `0.62`
+  and the landing chrome starts in at `0.38`, smoothstepped, so they are never
+  both at half strength on top of each other.
+
+**The rules that come with it:**
+
+- **Both ends of the dial are a complete page.** The CSS defaults are the
+  landing composition (`--opening: 0`, `--handover: 1`) and the runway is opened
+  by the script, so a page whose JavaScript never ran is the site as it was.
+- **Opacity is not enough to switch a control off.** The rail takes `inert` at
+  the halfway point, so nothing under the opening can be pressed or tabbed to.
+- **Scroll-driven opacity carries no `transition`.** A crossfade's easing lags
+  the scroll and reads as a stutter. Where an element needs both — the copy is
+  swapped under the rail *and* faded by the dial — they go on two nested
+  elements, one each.
+- **The opening is legible because of what is behind it.** The object wears its
+  lit material for exactly as long as the sentence is up. Returning to the
+  opening therefore returns the object to that state too, through the rail, so
+  the pressed control moves with it and the two never disagree.
+- **Smoothing is [Lenis](https://lenis.darkroom.engineering/)**, which drives the
+  real scroll position rather than a transform — so `position: sticky`,
+  `scrollY` and anchors all still mean what they say. Subscribe to both
+  `lenis.on("scroll")` and the window's own event. Under
+  `prefers-reduced-motion: reduce` there is no Lenis at all: the browser's own
+  scrolling is the whole of what that setting is asking for.
 
 ---
 
@@ -440,8 +495,11 @@ page, never one per section.
 
 ### The header
 
-**Not a bar.** No background, no border, no sticky. Brand at the left, actions
-at the right, sitting directly on the wall:
+**Not a bar.** No background and no border — it sits directly on the wall, with
+the brand at the left and the actions at the right. It is not sticky either,
+except on a page that scrolls (§7.1), where it is pinned and still paints
+nothing, because the stage under it is pinned too and nothing ever passes
+behind it:
 
 - **Brand** = mark + wordmark in one link. Mark at `30px` on interior pages,
   `42px` on the landing page. Wordmark `1rem`/500 inside, `clamp(1rem, 1.35vw,
@@ -460,6 +518,26 @@ The same glass pill as the header actions, holding chips: transparent, `--muted`
 treatment. Disabled is `opacity: 0.45` with `cursor: progress` — used while the
 thing the rail controls is still loading, so a press cannot land before there is
 anything to select.
+
+### The mark, where the site does not control the ground
+
+Inside the page the monogram is `currentColor` — the same ink as the wordmark
+beside it, on whichever wall it sits. Everywhere the page ends, it is the
+**opaque ink mark on the site's own plaster**: `#16130f` on `#d2ccc2`, at 62% of
+the tile, in `favicon.svg` and in every PNG `scripts/build-icons.mjs` draws.
+
+Nothing there is transparent or adaptive, and both are deliberate. A transparent
+tile lets whatever draws it pick the ground, and they do not agree — Google
+composites a result row's icon onto a white disc, where the white-on-nothing
+mark the site used to ship was a white disc. An adaptive SVG does not help
+either: Safari does not resolve `prefers-color-scheme` inside a favicon, so the
+adaptive copy came out as its light-mode branch on a dark tab strip. Carrying
+the wall is the only answer that reads the same in all of them, and it makes the
+tile a chip of the page.
+
+Every `<link>` and every manifest entry carries `?v=${ICON_VERSION}`: Safari
+files favicons by URL and will not go back for a new one at an address it
+already holds. **Bump it whenever the drawing changes.**
 
 ### The card
 
@@ -612,7 +690,7 @@ GitHub Pages mirror.
 | `/glass/models/drone.mesh` | `public/glass/models/` | 870K | |
 | `/glass/models/robot.mesh` | `public/glass/models/` | 1.6M | |
 | `/glass/models/manipulator.mesh` | `public/glass/models/` | 1.9M | |
-| `/og.jpg` | `public/` | 96K | **The share card** — a photograph of the landing page, 1200×630. See below. |
+| `/og.jpg` | `public/` | 110K | **The share card** — a photograph of the landing page's opening, 1200×630. See below. |
 
 **Not served** — sources and sidecars:
 
@@ -745,6 +823,22 @@ knowing before you try to "fix" it by darkening `baseColor`, which flattens it
 instead. The fractal it morphs from is the dark ceramic
 (`HERO_FRACTAL_MATERIAL`, `baseColor: [71/255, ...]`, `ambientStrength: 0.34`).
 
+**And why there is a second one.** The landing page's handover (§7.1) dials the
+orb between that material and its opposite:
+
+```js
+HERO_ORB_LIGHT_MATERIAL = { baseColor: [1,1,1], roughness: 0.46,
+                            diffuseStrength: 1.05, specularStrength: 0.75,
+                            ambientStrength: 0.9 }
+```
+
+Same white body, taking the room in full instead of only its highlights — so it
+reads as lit plaster rather than obsidian. It is what the opening sentence is
+set over, and that is the reason it exists: black display serif over a
+transparent solid is legible only when the thing inside the solid is the
+lightest surface on the page. `interior.setOrbLight(0…1)` is the dial, blended
+*before* the morph, so a model's own ceramic never chases the scroll.
+
 The one self-lit thing on the site is the core inside the tesseract:
 `HERO_GLOW_MATERIAL = { color: [1, 0.965, 0.925], strength: 2.4 }` — white with
 the room's warmth in it, because a light inside the glass that was neutral would
@@ -762,7 +856,10 @@ node scripts/build-wall.mjs                # re-bake public/glass/wall-material.
 node scripts/check-wall-color.mjs          # then re-derive the linear WALL_COLOR constant
 node scripts/build-meshes.mjs              # assets/models/*.glb → public/glass/models/*.mesh
 node scripts/build-og.mjs [url]            # re-photograph public/og.jpg (the share card);
-                                           # needs a windowed browser, then bump OG_IMAGE_VERSION
+                                           # needs a windowed browser and a production
+                                           # build (the dev toolbar is in frame otherwise),
+                                           # then bump OG_IMAGE_VERSION
+node scripts/build-icons.mjs               # re-draw the favicon PNGs, then bump ICON_VERSION
 node scripts/inspect-glb.mjs <file.glb>    # list a Spline export's nodes before converting
 ```
 
@@ -816,7 +913,7 @@ Still zero assets.
 
 **Budget.** Wall, glass and the orb alone is ~2.0 MB of assets
 (`wall-material.png` 816K + `fractal-tetrahedron-l7.mesh` 1.1M + cubemap 68K +
-mask 16K + solid 8K). Every platform mesh you add is 100K–1.9M on top, fetched
+mask 16K + solid 8K). Every system mesh you add is 100K–1.9M on top, fetched
 lazily — the landing page prefetches them on `requestIdleCallback` *after* the
 first shape is up, never before.
 
@@ -932,6 +1029,7 @@ Then, in order:
 | Prose page | `src/pages/privacy.astro`, `src/pages/404.astro` |
 | Glass framing a third-party embed | `src/pages/book.astro` |
 | Manifest, icons, theme colour | `src/pages/site.webmanifest.ts`, `scripts/build-icons.mjs` |
+| Scroll handover on the landing page | `src/components/Prism.astro`, `src/pages/index.astro` |
 | Share card (Open Graph) | `public/og.jpg`, `scripts/build-og.mjs` |
 | Base-path helper (apex vs. Pages mirror) | `src/lib/base.ts` |
 

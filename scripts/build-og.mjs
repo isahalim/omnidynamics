@@ -23,8 +23,16 @@
  *
  * Defaults to the deployed site, since the card should show what a visitor
  * arriving from the link will actually meet. Pass a dev server to preview a
- * change before it ships. Bump `OG_IMAGE_VERSION` in `src/layouts/Base.astro`
- * afterwards, or the scrapers will go on serving the card they already hold.
+ * change before it ships — a production build, though, or Astro's dev toolbar
+ * is photographed along with the page. Bump `OG_IMAGE_VERSION` in
+ * `src/layouts/Base.astro` afterwards, or the scrapers will go on serving the
+ * card they already hold.
+ *
+ * The frame is taken at the top of the page, which is where the landing page's
+ * opening is: the company's one sentence set over the lit orb, before the
+ * scroll hands the page over to the picker. That is the right card — it is the
+ * first thing a visitor meets, and it is the only screen with the sentence on
+ * it. See the handover in `src/components/Prism.astro`.
  */
 import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";

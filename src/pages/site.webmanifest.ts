@@ -18,7 +18,7 @@ const ICON = { sizes: "512x512", type: "image/png" } as const;
  * address it already holds, so the address has to be the thing that moves.
  * `src/layouts/Base.astro` stamps the same version on the `<link>`s.
  */
-export const ICON_VERSION = "2";
+export const ICON_VERSION = "3";
 const v = `?v=${ICON_VERSION}`;
 
 export const GET: APIRoute = () =>
@@ -28,8 +28,8 @@ export const GET: APIRoute = () =>
         name: "OmniDynamics",
         short_name: "OmniDynamics",
         description:
-          "OmniDynamics builds embodied intelligence — drones, manipulators " +
-          "and humanoids.",
+          "OmniDynamics deploys scalable agentic systems and platforms for " +
+          "evaluating Physical AI Agents.",
         start_url: withBase("/"),
         scope: withBase("/"),
         display: "standalone",

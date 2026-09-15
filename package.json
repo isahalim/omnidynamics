@@ -25,6 +25,7 @@
   "dependencies": {
     "@calcom/embed-snippet": "^1.3.3",
     "@vgpu/wgsl": "^0.4.0",
+    "lenis": "^1.3.26",
     "vgpu": "^0.4.0"
   }
 }

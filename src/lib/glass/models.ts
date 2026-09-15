@@ -12,14 +12,15 @@ export interface PrismStateInfo {
   /** Where a click on the shape leads, or null when it has nowhere to send you. */
   readonly href: string | null;
   /**
-   * True for a platform that is still unbuilt and has a page of its own saying
+   * True for a system that is still unbuilt and has a page of its own saying
    * so, which is where a click on it lands.
    */
   readonly soon?: boolean;
   /**
-   * What the shape in the glass is, for the landing page's copy. A tool says
-   * what it is; a platform with nothing behind it but a coming-soon page says
-   * what a click on it does, which is all there is to know until it exists.
+   * What the shape in the glass is, for the landing page's copy. A system that
+   * has shipped says what it is; one with nothing behind it but a coming-soon
+   * page says what a click on it does, which is all there is to know until it
+   * exists.
    */
   readonly blurb?: string;
   /** The line under it, in the smaller size. */
@@ -32,24 +33,24 @@ export const PRISM_STATES: readonly PrismStateInfo[] = [
     label: "Mythos Engine",
     href: "https://mythosengine.omnidynamics.dev/",
     blurb:
-      "A tool that automates content generation and daily intelligence " +
-      "briefings to captivate and inform audiences rapidly — scripts, " +
-      "scenes and voice, from a prompt to a finished piece.",
-    hint: "Click the orb to use it",
+      "An autonomous platform that orchestrates content generation and daily " +
+      "intelligence briefings to captivate and inform audiences rapidly — " +
+      "scripts, scenes, and voice, from a prompt to a finished piece.",
+    hint: "Click the orb to access it",
   },
   {
     id: "chronovoxel",
-    // The one platform you can go and read today, so the tesseract is a door
+    // The one system you can go and read today, so the tesseract is a door
     // rather than a promise: it leads to the work itself, written up.
     label: "ChronoVoxel",
     href: "https://isahalim.github.io/Embodied-XAI-Is-All-You-Need/",
     blurb:
-      "A model-agnostic tool and evaluation harness that turns a physical AI " +
-      "agent's fleeting, frame-by-frame attention into one persistent, " +
-      "queryable 4D record — accumulating, comparing, and replaying why " +
-      "multimodal VLM/LLM systems chose what they chose, from raw pixels to a " +
-      "certifiable heat field in the world.",
-    hint: "Click the tesseract to read it",
+      "A model-agnostic platform with an autonomous evaluation harness that " +
+      "turns a physical AI agent's fleeting, frame-by-frame attention into " +
+      "one persistent, queryable 4D record — accumulating, comparing, and " +
+      "replaying why multimodal VLM/LLM systems chose what they chose, from " +
+      "raw pixels to a certifiable heat field in the world.",
+    hint: "Click the tesseract to access it",
   },
   {
     id: "drone",

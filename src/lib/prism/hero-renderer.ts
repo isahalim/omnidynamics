@@ -8,12 +8,12 @@
  * bakes. The glass and everything inside it are the glass-fractal example's:
  * its rounded tetrahedron, its screen-space transmission, its studio cubemap,
  * its 20 degree camera raised off the axis. The beam and the spectrum the
- * coming-soon pages carry are not here — the glass holds a platform instead,
+ * coming-soon pages carry are not here — the glass holds a system instead,
  * and a rainbow across it would read as a second subject.
  *
  * The two pass structures agree, which is what lets them be composed at all.
  * vgpu's glass reads a resolved image of everything behind it and refracts it,
- * so the wall, the shadow, the glass's own back faces and the platform are all
+ * so the wall, the shadow, the glass's own back faces and the system are all
  * drawn into one target first, and the front interface samples that. Its
  * material composites in display space, so the wall is tone mapped where it is
  * drawn rather than at the end.
@@ -75,7 +75,7 @@ const CAMERA_FOV = PYRAMID_CAMERA.fov;
 /** Far enough back that the fit always has room to search inward. */
 const DEFAULT_DISTANCE = 2.4;
 
-/** What the glass is handed before there is a platform in it to light it. */
+/** What the glass is handed before there is a system in it to light it. */
 const NO_CORE: InteriorCoreLight = {
   position: [0, 0, 0],
   color: [0, 0, 0],
@@ -104,8 +104,14 @@ export interface HeroRendererOptions {
 
 export interface HeroRenderer {
   readonly ready: Promise<void>;
-  /** Morphs to another platform inside the glass, through the orb. */
+  /** Morphs to another system inside the glass, through the orb. */
   setState(state: PrismInteriorId): Promise<void>;
+  /**
+   * Which orb is in the glass, from 0 for the polished dark one to 1 for the
+   * lit one the landing page opens on. The landing page drives it from the
+   * scroll; every other page never calls it. See `interior.setOrbLight`.
+   */
+  setOrbLight(amount: number): void;
   /**
    * Puts the scene back on screen after the browser restored the page from its
    * back/forward cache, where nothing was disposed but no frame was ever asked
@@ -149,6 +155,13 @@ export function createHeroRenderer(options: HeroRendererOptions): HeroRenderer {
 
   let animationFrame = 0;
   let visible = true;
+  /**
+   * Held here as well as in the interior because the page may set it before
+   * there is an interior to set it on: the landing page restores its scroll
+   * position on a back-navigation and says which orb it wants at once, and the
+   * meshes take a moment to arrive.
+   */
+  let orbLight = 0;
 
   const viewportFor = () => {
     if (!options.frame) return undefined;
@@ -214,7 +227,7 @@ export function createHeroRenderer(options: HeroRendererOptions): HeroRenderer {
       },
     });
 
-    // The platform is bound first because the glass has to know where the lamp
+    // The system is bound first because the glass has to know where the lamp
     // inside it is standing before it can catch its light, and where that is
     // depends on where the shape has drifted to this frame. What comes back is
     // the lamp as the glass sees it, which is not what the shells see.
@@ -386,7 +399,7 @@ export function createHeroRenderer(options: HeroRendererOptions): HeroRenderer {
     if (disposed) return;
 
     // One display-space target: the glass reads its own background out of it,
-    // and the platform inside needs somewhere to sort itself out against.
+    // and the system inside needs somewhere to sort itself out against.
     backdrop = target(gpu, {
       size: canvasSurface.size,
       format: canvasSurface.format,
@@ -417,6 +430,7 @@ export function createHeroRenderer(options: HeroRendererOptions): HeroRenderer {
       abort.signal
     );
     if (disposed) return;
+    interior.setOrbLight(orbLight);
 
     draws = {
       wall: draw(gpu, {
@@ -511,6 +525,11 @@ export function createHeroRenderer(options: HeroRendererOptions): HeroRenderer {
     async setState(state: PrismInteriorId) {
       request();
       await interior?.setState(state);
+      request();
+    },
+    setOrbLight(amount: number) {
+      orbLight = amount;
+      interior?.setOrbLight(amount);
       request();
     },
     resume() {

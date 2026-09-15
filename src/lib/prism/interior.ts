@@ -1,5 +1,5 @@
 /**
- * The platform held inside the glass.
+ * The system held inside the glass.
  *
  * vgpu's glass-fractal example holds one shape in its tetrahedron and morphs it
  * between a fractal and an orb; the landing page holds a tesseract, a drone, a
@@ -24,6 +24,7 @@ import {
   HERO_FRACTAL_GLASS,
   HERO_FRACTAL_MATERIAL,
   HERO_GLOW_MATERIAL,
+  HERO_ORB_LIGHT_MATERIAL,
   HERO_ORB_MATERIAL,
   type HeroFractalMaterial,
 } from "../glass/settings";
@@ -124,6 +125,13 @@ export interface PrismInterior {
   /** Advances the morph and the orb clock. */
   tick(time: number): void;
   setState(state: PrismInteriorId): Promise<void>;
+  /**
+   * How much of the orb's light material it is wearing, 0 for the polished
+   * dark ball the picker sits under and 1 for the lit one the landing page
+   * opens on. The landing page drives this from the scroll; every other page
+   * leaves it at 0. See `HERO_ORB_LIGHT_MATERIAL`.
+   */
+  setOrbLight(amount: number): void;
   dispose(): void;
 }
 
@@ -262,6 +270,9 @@ export async function createPrismInterior(
   // a propeller has to keep turning while the shape stands still.
   let rigTime = 0;
   let epoch = 0;
+  // Which orb is in the glass. Set from the landing page's scroll, and left at
+  // the dark one everywhere else.
+  let orbLight = 0;
 
   const entry = () => entries.get(current) ?? entries.get("fractal")!;
 
@@ -335,7 +346,13 @@ export async function createPrismInterior(
         pose ? pose.roll : 0
       )
     );
-    const material = blendMaterial(HERO_FRACTAL_MATERIAL, HERO_ORB_MATERIAL, sphereMix);
+    // Two blends, in this order. The first picks which orb this is — the lit one
+    // the page opens on, or the polished dark one it hands over to — and the
+    // second is the morph, which is what carries a model's own ceramic into it.
+    // Doing them the other way round would have the model's material chasing
+    // the scroll, which it has no business doing.
+    const orb = blendMaterial(HERO_ORB_MATERIAL, HERO_ORB_LIGHT_MATERIAL, orbLight);
+    const material = blendMaterial(HERO_FRACTAL_MATERIAL, orb, sphereMix);
     // The shape is centred on its own bounds, so the lamp inside it stands at
     // the model matrix's own translation — the shape's centre, carried through
     // the lean, the drift and the pyramid in one. The scale it was carried
@@ -526,6 +543,9 @@ export async function createPrismInterior(
     },
     tick,
     setState,
+    setOrbLight(amount: number) {
+      orbLight = Math.min(1, Math.max(0, amount));
+    },
     dispose() {
       if (disposed) return;
       disposed = true;

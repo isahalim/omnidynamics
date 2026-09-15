@@ -9,11 +9,13 @@ import { withBase } from "../lib/base";
 
 <Base
   title="OmniDynamics"
-  description="OmniDynamics builds embodied intelligence — drones, manipulators and humanoids."
+  description="OmniDynamics deploys scalable agentic systems and platforms for evaluating Physical AI Agents."
 >
   <div class="page">
-    <!-- Not a bar: the header sits directly on the wall with the prism. -->
-    <header class="top">
+    <!-- Not a bar: the header sits directly on the wall with the prism. It is
+         pinned all the same, because the page under it scrolls now — and
+         nothing ever passes behind it, since the stage is pinned too. -->
+    <header class="top" id="top">
       <a class="brand clicky" href={withBase("/")}>
         <Logo />
         <span class="wordmark">OmniDynamics</span>
@@ -32,8 +34,9 @@ import { withBase } from "../lib/base";
 </Base>
 
 <style>
-  /* A viewport-tall column over the wall: header at the top, the prism stage
-     taking the rest so the picker settles just above the bottom edge. */
+  /* A column over the wall: header at the top, the prism stage taking the rest
+     so the picker settles just above the bottom edge. The height is the stage's
+     own business — without the script it is one viewport, with it two. */
   .page {
     position: relative;
     z-index: 2;
@@ -42,7 +45,7 @@ import { withBase } from "../lib/base";
     min-block-size: 100dvh;
     max-inline-size: 88rem;
     margin-inline: auto;
-    padding: clamp(1rem, 2.5vw, 1.75rem) clamp(1rem, 4vw, 3rem) 0;
+    padding-inline: clamp(1rem, 4vw, 3rem);
   }
 
   main {
@@ -51,12 +54,18 @@ import { withBase } from "../lib/base";
     flex-direction: column;
   }
 
+  /* The header carries its own vertical padding rather than taking it from the
+     page, so that what it occupies is one measurable band — which is what the
+     stage below sticks underneath. */
   .top {
+    position: sticky;
+    inset-block-start: 0;
+    z-index: 3;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    padding-block-end: clamp(0.75rem, 2vh, 1.5rem);
+    padding-block: clamp(1rem, 2.5vw, 1.75rem) clamp(0.75rem, 2vh, 1.5rem);
   }
 
   .brand {
@@ -94,3 +103,26 @@ import { withBase } from "../lib/base";
     .quiet { display: none; }
   }
 </style>
+
+<script>
+  /**
+   * How tall the header's band is, published as `--top-band`.
+   *
+   * The stage sticks directly underneath it and is sized to what is left of the
+   * viewport, and both of those are the header's height — which is a clamp on
+   * the viewport, a mark at one of two sizes, and a pill rail whose contents
+   * depend on whether anyone is signed in. Measuring it is the only honest
+   * answer; guessing it puts the glass behind the brand on one phone and leaves
+   * a gap on the next.
+   */
+  const top = document.getElementById("top");
+  if (top) {
+    const publish = () =>
+      document.documentElement.style.setProperty(
+        "--top-band",
+        `${Math.round(top.getBoundingClientRect().height)}px`
+      );
+    new ResizeObserver(publish).observe(top);
+    publish();
+  }
+</script>

@@ -112,6 +112,28 @@ export const HERO_ORB_MATERIAL = {
   ambientStrength: 0,
 } satisfies HeroFractalMaterial;
 /**
+ * The same orb, at the top of the landing page, before the scroll hands the
+ * page over to the picker.
+ *
+ * `HERO_ORB_MATERIAL` is a white base colour that takes almost none of the
+ * studio's diffuse light and nearly all of its specular, which is what makes it
+ * read as a dark polished ball with a hot highlight on it. This is the other
+ * end of that: the same white base colour taking the studio's light in full, so
+ * the ball reads as lit plaster rather than as obsidian. Nothing about its
+ * shape, its size or its wobble changes — only how much of the room it keeps.
+ *
+ * It is also what the opening headline is set over, which is the reason it is
+ * this bright: black display serif over the glass needs the thing behind it to
+ * be the lightest surface on the page, not the darkest.
+ */
+export const HERO_ORB_LIGHT_MATERIAL = {
+  baseColor: [1, 1, 1],
+  roughness: 0.46,
+  diffuseStrength: 1.05,
+  specularStrength: 0.75,
+  ambientStrength: 0.9,
+} satisfies HeroFractalMaterial;
+/**
  * The core inside the tesseract's shells.
  *
  * Every surface in the glass is the one dark ceramic, and this is the only

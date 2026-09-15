@@ -30,7 +30,7 @@ const BLURB: Record<string, string> = {
   robot: "Built for human-shaped environments",
 };
 
-const platforms = PRISM_STATES.filter((entry) => entry.soon);
+const systems = PRISM_STATES.filter((entry) => entry.soon);
 const headline = HEADLINE[state.id]!;
 ---
 
@@ -47,7 +47,7 @@ const headline = HEADLINE[state.id]!;
         <span class="wordmark">OmniDynamics</span>
       </a>
       <nav class="links">
-        <a class="clicky" href={withBase("/")}>Tools</a>
+        <a class="clicky" href={withBase("/")}>Systems</a>
         <a class="clicky" href={ROUTES.privacy}>Privacy</a>
         <AccountActions />
       </nav>
@@ -64,7 +64,7 @@ const headline = HEADLINE[state.id]!;
         </p>
 
         <p class="tabs">
-          {platforms.map((entry, index) => (
+          {systems.map((entry, index) => (
             <>
               {index > 0 && <span class="dot" aria-hidden="true">·</span>}
               <a
@@ -156,7 +156,7 @@ const headline = HEADLINE[state.id]!;
   }
 
   /* vgpu sets its wordmark in a serif, several times the size of anything else
-     on the page; the platform name takes that slot here. */
+     on the page; the system name takes that slot here. */
   h1 {
     margin: 0;
     font-family: ui-serif, Georgia, "Iowan Old Style", "Times New Roman", serif;
