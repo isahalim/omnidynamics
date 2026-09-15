@@ -26,6 +26,31 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
  */
 const OG_IMAGE_VERSION = "2";
 const ogImage = new URL(`${base}/og.jpg?v=${OG_IMAGE_VERSION}`, Astro.site);
+/**
+ * The one typeface. Camaufalge is a single Regular master, so the whole site is
+ * set in one weight and the hierarchy is carried by size, tracking and opacity
+ * — see DESIGN.md §3.
+ *
+ * The rule is built here rather than written in the global `<style>` below
+ * because a style block cannot see the frontmatter, and a bare
+ * `url(/fonts/…)` is exactly the absolute path `src/lib/base.ts` exists to
+ * forbid: under the GitHub Pages build it resolves off the repository prefix,
+ * 404s, and the browser falls silently back to the system sans with no error
+ * anywhere to say the page is set in the wrong face.
+ *
+ * `swap` over `block`: the fallback stack below is metrically nothing like
+ * Camaufalge, so there is a visible reflow either way, and copy the reader can
+ * read immediately beats a blank page that snaps into place.
+ *
+ * Built from `assets/fonts/Camaufalge.ttf`; see DESIGN.md §3 for the command.
+ */
+const fontFace = `@font-face {
+  font-family: "Camaufalge";
+  src: url("${base}/fonts/Camaufalge.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}`;
 ---
 
 <!doctype html>
@@ -33,6 +58,22 @@ const ogImage = new URL(`${base}/og.jpg?v=${OG_IMAGE_VERSION}`, Astro.site);
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    {/*
+      Every word on the site is set in this file, so it is on the critical path
+      in the strictest sense: without the preload the browser does not learn the
+      font exists until it has parsed the stylesheet, matched a rule and laid
+      out a glyph, which is a whole round trip after it could have started.
+      `crossorigin` is not optional even same-origin — fonts are fetched in CORS
+      mode, and a preload without it is a second, wasted download.
+    */}
+    <link
+      rel="preload"
+      href={`${base}/fonts/Camaufalge.woff2`}
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <style is:inline set:html={fontFace}></style>
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
@@ -119,6 +160,22 @@ const ogImage = new URL(`${base}/og.jpg?v=${OG_IMAGE_VERSION}`, Astro.site);
     --muted: #6d6459;
     --accent: #c0281d;
     --line: rgb(60 48 34 / 0.12);
+
+    /* One typeface, both roles. The site used to run a system serif against a
+       system sans and download no font bytes at all; it now downloads 17 KB and
+       sets everything — display and UI — in Camaufalge, so the two tokens point
+       at the same stack and stay separate only because the roles still differ in
+       size, tracking and leading and may want to diverge again.
+
+       The system sans behind it is doing real work, not just covering a failed
+       download: Camaufalge is Latin-1 plus the punctuation a sentence needs, so
+       anything outside that — the `·` between the footer links, most of all —
+       is drawn from the fallback, per glyph, with the rest of the line still in
+       Camaufalge. */
+    --font-display: "Camaufalge", ui-sans-serif, system-ui, -apple-system,
+      "Segoe UI", Helvetica, Arial, sans-serif;
+    --font-ui: "Camaufalge", ui-sans-serif, system-ui, -apple-system,
+      "Segoe UI", Helvetica, Arial, sans-serif;
   }
 
   *, *::before, *::after { box-sizing: border-box; }
@@ -132,8 +189,7 @@ const ogImage = new URL(`${base}/og.jpg?v=${OG_IMAGE_VERSION}`, Astro.site);
     margin: 0;
     min-block-size: 100dvh;
     color: var(--ink);
-    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica,
-      Arial, sans-serif;
+    font-family: var(--font-ui);
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     /* The lit plaster and its tooth are shaded by the prism canvas, which

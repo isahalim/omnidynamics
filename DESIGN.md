@@ -99,41 +99,91 @@ not a token swap — do not invert these values and ship it.
 
 ## 3. Type
 
-Two families. A serif for the one big thing on the page, the system sans for
-everything else. No webfont is loaded anywhere: the site downloads zero font
-bytes, and that is a feature worth keeping.
+One family, everywhere. Every word on the site is set in **Camaufalge** — a
+geometric single-weight sans — and the system sans stands behind it only as a
+fallback. The two tokens survive because the two *roles* survive; they point at
+the same stack today and are kept apart so a display face could be reintroduced
+without touching every rule that names one.
 
 ```css
---font-display: ui-serif, Georgia, "Iowan Old Style", "Times New Roman", serif;
---font-ui: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica,
-           Arial, sans-serif;
+--font-display: "Camaufalge", ui-sans-serif, system-ui, -apple-system,
+                "Segoe UI", Helvetica, Arial, sans-serif;
+--font-ui: "Camaufalge", ui-sans-serif, system-ui, -apple-system,
+           "Segoe UI", Helvetica, Arial, sans-serif;
 ```
+
+This replaced the previous pairing — a system serif for the one big thing, the
+system sans for everything else — and with it the rule that the site downloads
+zero font bytes. It now downloads one file, 17 KB of WOFF2, preloaded and set
+`font-display: swap`. That is the whole cost, and it is the only webfont this
+site is allowed.
+
+**What the face is, and is not.** Camaufalge is one Regular master, Latin-1 plus
+sentence punctuation. Three consequences follow, and they are not bugs:
+
+- **There is no second weight.** `font-weight: 600` is synthesised by the
+  browser; `300` simply renders as Regular. Hierarchy is therefore carried by
+  size, tracking, opacity and colour — which is what §8 asks for anyway — and a
+  weight in the table below is an instruction to the *fallback*, not a promise
+  the face can keep.
+- **There is no italic.** `<em>` is obliqued by the browser. Use it sparingly.
+- **Coverage stops at Latin-1 and the common punctuation.** Anything outside it
+  is drawn from the fallback stack, one glyph at a time, in the middle of a line
+  that is otherwise Camaufalge. The `·` separating the footer links is the one
+  place this shows today. Before reaching for a character, check that the face
+  has it.
+
+**The comma is a baseline dot**, nearly indistinguishable from a full stop at
+body size. It is a property of the face. It is tolerable in a lede and in the
+short paragraphs this site is built from; it is what makes a long legal page the
+hardest thing here to read, and it is the reason to keep the measure tight and
+the paragraphs short rather than to fight it with CSS.
+
+### Where the font lives
+
+`assets/fonts/Camaufalge.ttf` is the source. `public/fonts/Camaufalge.woff2` is
+what ships, built from it once and committed alongside the meshes and icons,
+the same way every other derived asset in `public/` is:
+
+```sh
+python3 -c 'from fontTools.ttLib import TTFont; f=TTFont("assets/fonts/Camaufalge.ttf"); f.flavor="woff2"; f.save("public/fonts/Camaufalge.woff2")'
+```
+
+The `@font-face` is built in `src/layouts/Base.astro`'s frontmatter rather than
+written into the global `<style>`, because a style block cannot see the base
+prefix and a bare `url(/fonts/…)` is the absolute path `src/lib/base.ts` exists
+to forbid — under the GitHub Pages build it 404s and the page falls silently
+back to the system sans with nothing anywhere to say the type is wrong.
 
 ### The scale
 
 | Role | Size | Weight | Tracking | Leading |
 |---|---|---|---|---|
-| Display `h1` | `clamp(3rem, 9vw, 5.5rem)` | 400 serif | `-0.02em` | `0.9` |
-| Display, hero page | `clamp(3.25rem, 11vw, 9.5rem)` | 400 serif | `-0.02em` | `0.86` |
-| Lede | `clamp(1.15rem, 2.2vw, 1.5rem)` | **300** sans | `-0.015em` | `1.3` |
-| Body | `1.0625rem` | 400 sans | — | `1.62` |
-| Section head (`h2`) | `0.75rem` | 600 sans, uppercase | `0.12em` | — |
-| Eyebrow / kicker | `0.6875rem` | 400 sans, uppercase | `0.12em` | — |
-| UI / controls | `0.875rem` | 400 sans | — | — |
-| Fine print | `0.8125rem` | 400 sans | — | `1.55` |
+| Display `h1` | `clamp(3rem, 9vw, 5.5rem)` | 400 | `-0.02em` | `0.9` |
+| Display, hero page | `clamp(3.25rem, 11vw, 9.5rem)` | 400 | `-0.02em` | `0.86` |
+| Lede | `clamp(1.15rem, 2.2vw, 1.5rem)` | **300** | `-0.015em` | `1.3` |
+| Body | `1.0625rem` | 400 | — | `1.62` |
+| Section head (`h2`) | `0.75rem` | 600, uppercase | `0.12em` | — |
+| Eyebrow / kicker | `0.6875rem` | 400, uppercase | `0.12em` | — |
+| UI / controls | `0.875rem` | 400 | — | — |
+| Fine print | `0.8125rem` | 400 | — | `1.55` |
 
 **The rules underneath the table:**
 
-- **The serif is set at 400 and large.** It is never bold, never small, and
-  never used for a paragraph. One per page, at the top. That single oversized
-  light serif against small tight sans *is* the typographic signature.
+- **The display size is set at 400 and large.** It is never small and never used
+  for a paragraph. One per page, at the top. Now that one face does both jobs,
+  that single oversized setting against small tight UI copy *is* the
+  typographic signature — the contrast is scale, not family, and it has to be
+  large enough to read as deliberate.
 - **Display type is tight and negative.** Line-height below 1 and
   `letter-spacing: -0.02em`. Headings set at 1.2 leading look like a blog.
 - **The lede is weight 300.** Thin, large, one or two lines, often with a
-  hand-placed `<br>` because the break is part of the composition.
+  hand-placed `<br>` because the break is part of the composition. In Camaufalge
+  it renders as Regular; the declaration stays for the fallback and for the day
+  a second master exists.
 - **Section headings are not big — they are small, uppercase and muted.** The
   size hierarchy inverts on purpose: the *label* recedes and the *content*
-  carries. Nothing between the display serif and 1.0625rem body ever appears.
+  carries. Nothing between the display size and 1.0625rem body ever appears.
 - **Measure is capped at `38rem` for body copy, `26–32rem` for notes.** Set it
   with `max-inline-size` on the paragraph, not on a wrapper.
 
@@ -422,8 +472,8 @@ scroll-triggered reveal the rule forbids.
   well before the runway runs out, so the page is settled and still for the last
   stretch instead of arriving exactly as the scroll does.
 - What it drives is **two opacities and one material**: `--opening` on the
-  display serif, `--handover` on the copy and the control rail, and the object's
-  own material, from its lit variant to its dark one (§12).
+  display sentence, `--handover` on the copy and the control rail, and the
+  object's own material, from its lit variant to its dark one (§12).
 - The two opacities **cross rather than overlap**: the opening is out by `0.62`
   and the landing chrome starts in at `0.38`, smoothstepped, so they are never
   both at half strength on top of each other.
@@ -441,8 +491,8 @@ scroll-triggered reveal the rule forbids.
   elements, one each.
 - **The opening is legible because of what is behind it.** The object wears its
   lit material for exactly as long as the sentence is up, and the *shape* in it
-  is the plain one — a dark, busy silhouette under a display serif is not a
-  composition. Returning to the opening therefore empties the object back to
+  is the plain one — a dark, busy silhouette under the display sentence is not
+  a composition. Returning to the opening therefore empties the object back to
   that shape.
 - **The rail keeps the choice; the dial only borrows the object.** Two values,
   not one: what the rail is set to, which only a press moves, and what is
@@ -648,6 +698,20 @@ Non-negotiable, and cheap at this scale:
 - `[hidden] { display: none !important; }` in the global sheet — components set
   `display` on those elements and the attribute would otherwise be ignored.
 - Reduced motion is honoured in every block that animates.
+- **The typeface costs legibility, so do not also spend the contrast.**
+  Camaufalge is geometric, single-weight, and its comma sits on the baseline
+  like a full stop (§3). **Running prose stays at `1.0625rem` and at `--ink`** —
+  a paragraph set small *and* muted in this face is the combination that stops
+  being readable. The smaller sizes in §3 are for labels, eyebrows and fine
+  print: a few words, already uppercase or already short, where a reader is
+  scanning rather than reading. Do not set a paragraph at one of them. Where
+  something has to be got exactly right — an address, a token, a date — mark it
+  up, do not rely on the face to distinguish it.
+- **`font-display: swap` means the type reflows on first paint.** A script that
+  measures a box containing text has to keep watching it — `--top-band` in
+  `src/pages/index.astro` measures the header and is correct only because a
+  `ResizeObserver` re-publishes it when the swap lands. A one-shot measurement
+  of text has to wait for `document.fonts.ready` instead.
 
 ---
 
@@ -716,11 +780,13 @@ GitHub Pages mirror.
 | `/glass/models/robot.mesh` | `public/glass/models/` | 1.6M | |
 | `/glass/models/manipulator.mesh` | `public/glass/models/` | 1.9M | |
 | `/og.jpg` | `public/` | 110K | **The share card** — a photograph of the landing page's opening, 1200×630. See below. |
+| `/fonts/Camaufalge.woff2` | `public/fonts/` | 17K | **The typeface** — every word on the site, one Regular master. Preloaded from the head and set `font-display: swap`; if it fails the pages are still set, in the system sans behind it. See §3. |
 
 **Not served** — sources and sidecars:
 
 | Path | Size | What |
 |---|---|---|
+| `assets/fonts/Camaufalge.ttf` | 46K | Camaufalge Regular, source for `Camaufalge.woff2` |
 | `assets/models/dark_tesseract.glb` | 240K | Spline export, source for `chronovoxel.mesh` |
 | `assets/models/drone.glb` | 1.1M | |
 | `assets/models/nexbot_robot_character_concept.glb` | 2.8M | source for `robot.mesh` |
@@ -731,7 +797,9 @@ GitHub Pages mirror.
 > **Licence check before you carry these across.** The vgpu code and its own
 > assets are MIT. The GLB exports in `assets/models/` are third-party model
 > assets and are *not* covered by that — confirm each one's terms before
-> shipping it in another product.
+> shipping it in another product. The same applies to the typeface:
+> Camaufalge is © RockboyStudio, and the site redistributes it as a webfont.
+> Confirm the licence covers that before carrying it anywhere else.
 
 ### The share card is a photograph, not a drawing
 
@@ -859,7 +927,7 @@ HERO_ORB_LIGHT_MATERIAL = { baseColor: [1,1,1], roughness: 0.46,
 
 Same white body, taking the room in full instead of only its highlights — so it
 reads as lit plaster rather than obsidian. It is what the opening sentence is
-set over, and that is the reason it exists: black display serif over a
+set over, and that is the reason it exists: black display type over a
 transparent solid is legible only when the thing inside the solid is the
 lightest surface on the page. `interior.setOrbLight(0…1)` is the dial, blended
 *before* the morph, so a model's own ceramic never chases the scroll.
@@ -886,6 +954,9 @@ node scripts/build-og.mjs [url]            # re-photograph public/og.jpg (the sh
                                            # then bump OG_IMAGE_VERSION
 node scripts/build-icons.mjs               # re-draw the favicon PNGs, then bump ICON_VERSION
 node scripts/inspect-glb.mjs <file.glb>    # list a Spline export's nodes before converting
+
+# The typeface has no script — it is converted once and committed. See §3.
+# assets/fonts/Camaufalge.ttf → public/fonts/Camaufalge.woff2
 ```
 
 The renderer compiles its WGSL lazily in the browser, so a shader mistake
@@ -960,6 +1031,12 @@ renderer.ready.then(
 Copy these two blocks into the new project's global stylesheet. Everything above
 is elaboration on them.
 
+The tokens name Camaufalge, so carry the font across with them — the WOFF2, the
+`@font-face`, the preload, and the licence check in §12 — or drop the family
+from both stacks and let the system sans have it. A token that names a face the
+project never loads is a page that looks correct locally and unset everywhere
+else.
+
 **The tokens and the room:**
 
 ```css
@@ -972,9 +1049,10 @@ is elaboration on them.
   --accent: #c0281d;
   --line: rgb(60 48 34 / 0.12);
 
-  --font-display: ui-serif, Georgia, "Iowan Old Style", "Times New Roman", serif;
-  --font-ui: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica,
-    Arial, sans-serif;
+  --font-display: "Camaufalge", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-ui: "Camaufalge", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Helvetica, Arial, sans-serif;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -1019,7 +1097,7 @@ Then, in order:
    `background_color` and `theme_color` to match, so the room extends into the
    browser chrome and the installed app.
 2. Build the header: brand link, one frosted pill rail, one solid primary.
-3. Give the page one display serif heading and one thin lede. Resist the second.
+3. Give the page one display-size heading and one thin lede. Resist the second.
 4. Decide the page's object — the thing that stands in the frame. If there is no
    renderer, the object can be a single well-made piece of glass or nothing at
    all; an empty warm wall with good type is on-style. A stock illustration is
@@ -1033,9 +1111,10 @@ Then, in order:
 1. A second brand colour, or a cool grey.
 2. An opaque panel behind copy — it cuts a hole in the wall.
 3. A `1px solid` border on the glass.
-4. A bold serif, or a serif below ~2.5rem.
+4. A display setting below ~2.5rem, where the size contrast that replaced the
+   family contrast stops reading as deliberate.
 5. Section headings that are larger than body text instead of smaller.
-6. A loaded webfont.
+6. A second loaded webfont. Camaufalge is the one, and it is already paid for.
 7. A second solid button competing with the primary.
 
 ---
@@ -1056,6 +1135,7 @@ Then, in order:
 | Manifest, icons, theme colour | `src/pages/site.webmanifest.ts`, `scripts/build-icons.mjs` |
 | Scroll handover on the landing page | `src/components/Prism.astro`, `src/pages/index.astro` |
 | Share card (Open Graph) | `public/og.jpg`, `scripts/build-og.mjs` |
+| The typeface | `src/layouts/Base.astro` (`@font-face`, preload), `public/fonts/`, `assets/fonts/` |
 | Base-path helper (apex vs. Pages mirror) | `src/lib/base.ts` |
 
 **The renderer** — see §12 for the full breakdown
@@ -1070,7 +1150,8 @@ Then, in order:
 | Posing model parts | `src/lib/prism/rig.ts`, `src/lib/glass/model-rigs.json` |
 | Light pipeline (ours) | `src/lib/prism/*.wgsl` |
 | Vendored vgpu glass-fractal + its licence | `src/lib/glass/`, `src/lib/glass/README.md`, `src/lib/glass/LICENSE` |
-| Served binary assets | `public/glass/`, `public/prism/` |
+| Served binary assets | `public/glass/`, `public/prism/`, `public/fonts/` |
 | Model sources | `assets/models/*.glb` |
+| Font source | `assets/fonts/Camaufalge.ttf` |
 | Asset pipeline | `scripts/build-wall.mjs`, `build-meshes.mjs`, `inspect-glb.mjs`, `build-og.mjs` |
 | Checks | `scripts/check-shaders.mjs`, `check-wall-color.mjs` |
