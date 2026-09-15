@@ -440,9 +440,24 @@ scroll-triggered reveal the rule forbids.
   swapped under the rail *and* faded by the dial — they go on two nested
   elements, one each.
 - **The opening is legible because of what is behind it.** The object wears its
-  lit material for exactly as long as the sentence is up. Returning to the
-  opening therefore returns the object to that state too, through the rail, so
-  the pressed control moves with it and the two never disagree.
+  lit material for exactly as long as the sentence is up, and the *shape* in it
+  is the plain one — a dark, busy silhouette under a display serif is not a
+  composition. Returning to the opening therefore empties the object back to
+  that shape.
+- **The rail keeps the choice; the dial only borrows the object.** Two values,
+  not one: what the rail is set to, which only a press moves, and what is
+  actually on show, which is the dial's business. Coming back down blossoms the
+  chosen thing out of the plain one again, and the copy beside it never moved.
+- **The object changes hands high on the dial, not where the copy does.** A
+  morph takes about a second and a flick of a wheel crosses the dial in a fifth
+  of that, so the shape has to be told early or it arrives after the sentence
+  does. Told at `0.8`, it is most of the way home before the first word is
+  legible, and on the way down it blossoms under the landing copy rather than
+  under the sentence.
+- **A morph that is redirected has to be able to say so.** Anything awaiting the
+  old destination is waiting for a value the shape will never reach; without a
+  token saying which morph is current, that wait polls `requestAnimationFrame`
+  for the life of the page and holds its caller's `finally` with it.
 - **Smoothing is [Lenis](https://lenis.darkroom.engineering/)**, which drives the
   real scroll position rather than a transform — so `position: sticky`,
   `scrollY` and anchors all still mean what they say. Subscribe to both
@@ -522,18 +537,28 @@ anything to select.
 ### The mark, where the site does not control the ground
 
 Inside the page the monogram is `currentColor` — the same ink as the wordmark
-beside it, on whichever wall it sits. Everywhere the page ends, it is the
-**opaque ink mark on the site's own plaster**: `#16130f` on `#d2ccc2`, at 62% of
-the tile, in `favicon.svg` and in every PNG `scripts/build-icons.mjs` draws.
+beside it, on whichever wall it sits. Everywhere the page ends, it is the **ink
+mark on nothing**: `#16130f` at 62% of the tile, transparent behind, in
+`favicon.svg` and in every PNG `scripts/build-icons.mjs` draws.
 
-Nothing there is transparent or adaptive, and both are deliberate. A transparent
-tile lets whatever draws it pick the ground, and they do not agree — Google
-composites a result row's icon onto a white disc, where the white-on-nothing
-mark the site used to ship was a white disc. An adaptive SVG does not help
-either: Safari does not resolve `prefers-color-scheme` inside a favicon, so the
-adaptive copy came out as its light-mode branch on a dark tab strip. Carrying
-the wall is the only answer that reads the same in all of them, and it makes the
-tile a chip of the page.
+**The ink is what does the work, not a ground.** These were white on nothing,
+which is a white disc anywhere the drawer picks a light plate — and Google
+composites a result row's icon onto exactly that, which is what the search
+result was showing. Dark on nothing reads on every plate they pick and stays out
+of the way of whatever is behind it. An adaptive SVG is not the answer either:
+Safari does not resolve `prefers-color-scheme` inside a favicon, so the adaptive
+copy came out as its light-mode branch wherever it landed.
+
+Two consequences worth knowing before someone files them as bugs:
+
+- **The antialiased edge fades out in alpha**, not towards a colour. The ink is
+  written flat across the tile and the coverage becomes the alpha, or the
+  browser's own chrome shows as a fringe around every stroke.
+- **iOS composites a transparent `apple-touch-icon` onto black**, so on the home
+  screen the mark is dark on dark. That is the price of one drawing everywhere,
+  and it is paid deliberately. If the home screen ever matters more than the
+  uniformity, give that one entry a ground back — `render()` takes one — rather
+  than putting every tile on a plate.
 
 Every `<link>` and every manifest entry carries `?v=${ICON_VERSION}`: Safari
 files favicons by URL and will not go back for a new one at an address it

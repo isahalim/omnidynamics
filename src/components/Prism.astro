@@ -369,7 +369,13 @@ const OPENING =
   // The coming-soon pages' wall, with vgpu's glass-fractal tetrahedron standing
   // on it and a system held inside the glass.
   const renderer = createHeroRenderer({ canvas, frame: hit });
-  let current: PrismState = "orb";
+  /**
+   * Which system the picker is set to. Only a press moves it — the scroll never
+   * does — so it is what the page comes back to on the way down.
+   */
+  let chosen: PrismState = "orb";
+  /** And which one is actually in the glass, which is the scroll's business. */
+  let shown: PrismState = "orb";
 
   // Nothing can be selected until there is a scene to morph: a click landing
   // before then moved the pressed chip without changing the shape, and left
@@ -426,30 +432,49 @@ const OPENING =
 
   let progress = -1;
 
+  /** How much of the opening is up, at a point on the dial. */
+  const openingAt = (at: number) => 1 - smoothStep(0, OPENING_OUT, at);
+  /** Where the page stops being the opening and starts being the landing page. */
+  const HALFWAY = 0.5;
+  /**
+   * And where the glass changes hands — high on the dial, deliberately not
+   * where the copy does.
+   *
+   * A morph takes about a second and a flick of a wheel can cross the whole
+   * dial in a fifth of that, so the shape has to be told early or it arrives
+   * after the sentence does: told at the sentence's own threshold, what you
+   * read on the way up is a display serif over a half-exploded tesseract. Told
+   * here, the shape is most of the way to the orb before the first word of the
+   * sentence is legible. Coming down it is the same point, which puts the
+   * system blossoming back out of the orb under the landing copy — where it
+   * belongs — rather than under the sentence.
+   */
+  const GLASS_CHANGES_AT = 0.8;
+
   const settle = (next: number) => {
     if (Math.abs(next - progress) < 0.0015) return;
     progress = next;
-    const opening = 1 - smoothStep(0, OPENING_OUT, next);
+    const opening = openingAt(next);
     const handover = smoothStep(LANDING_IN, 1, next);
     stage.style.setProperty("--opening", opening.toFixed(4));
     stage.style.setProperty("--handover", handover.toFixed(4));
     // Under the opening there is nothing to press and nothing to tab to.
-    picker.toggleAttribute("inert", opening > 0.5);
+    picker.toggleAttribute("inert", opening > HALFWAY);
     renderer.setOrbLight(opening);
-    // The opening is the orb. The sentence is set over the glass and is legible
-    // because what is behind it is the lightest thing on the page, so coming
-    // back up to the opening brings the glass back to the orb as well — through
-    // the picker, so the pressed chip moves with it and the two never disagree.
-    if (opening > 0.5 && current !== "orb") {
-      const home = chips.find((chip) => chip.dataset.state === "orb");
-      // Not "if the picker is free": a morph is exactly when the chips are
-      // disabled, and a reset dropped there is a reset nothing comes back for,
-      // because the dial only fires on the way past. `select` takes the
-      // interruption — it claims the selection synchronously and the interior
-      // drops whatever it was already doing.
-      if (home) void select("orb", home);
-    }
+    void present();
   };
+
+  /**
+   * What the glass should be holding, given the picker and the dial between
+   * them.
+   *
+   * The opening is the orb: the sentence is set over the glass and is legible
+   * because what is behind it is the lightest thing on the page, which a
+   * tesseract is not. So going back up empties the glass back to the orb — but
+   * only the glass. The picker keeps the choice, and coming back down blossoms
+   * it out of the orb again.
+   */
+  const wanted = (): PrismState => (progress < GLASS_CHANGES_AT ? "orb" : chosen);
 
   /** Where the page is, as 0 at the top and 1 once the handover is done. */
   const read = () =>
@@ -495,11 +520,21 @@ const OPENING =
     }, 200);
   };
 
-  const select = async (next: PrismState, chip: HTMLButtonElement) => {
-    if (next === current) return;
-    current = next;
-    for (const c of chips) c.setAttribute("aria-pressed", String(c === chip));
-    describe(next);
+  /**
+   * Morphs the glass to whatever `wanted` currently says, through the orb.
+   *
+   * It can be called again while it is still running — a press during a morph,
+   * or the dial crossing while one is in flight — and the interior takes that
+   * interruption: it claims the new state at once and drops whatever it was
+   * doing. Only the newest run hands the picker back, or an interrupted one
+   * would re-enable the chips the run that replaced it has just disabled.
+   */
+  let sequence = 0;
+  const present = async () => {
+    const next = wanted();
+    if (next === shown) return;
+    shown = next;
+    const token = ++sequence;
 
     const slow = window.setTimeout(() => say("Loading"), 260);
     for (const c of chips) c.disabled = true;
@@ -507,18 +542,31 @@ const OPENING =
       await renderer.setState(interiorFor(next) as PrismInteriorId);
     } catch (error) {
       console.error("prism state failed", error);
-      say("That system could not load");
-      window.setTimeout(() => say(""), 2400);
+      if (token === sequence) {
+        say("That system could not load");
+        window.setTimeout(() => say(""), 2400);
+      }
     } finally {
       window.clearTimeout(slow);
-      if (status.textContent === "Loading") say("");
-      for (const c of chips) c.disabled = false;
+      if (token === sequence) {
+        if (status.textContent === "Loading") say("");
+        for (const c of chips) c.disabled = false;
+      }
     }
+  };
+
+  /** A press: the choice, the pressed chip and the copy, then the glass. */
+  const choose = (next: PrismState, chip: HTMLButtonElement) => {
+    if (next === chosen) return;
+    chosen = next;
+    for (const c of chips) c.setAttribute("aria-pressed", String(c === chip));
+    describe(next);
+    void present();
   };
 
   for (const chip of chips) {
     chip.addEventListener("click", () => {
-      void select(chip.dataset.state as PrismState, chip);
+      choose(chip.dataset.state as PrismState, chip);
     });
   }
 
@@ -568,8 +616,8 @@ const OPENING =
       handOver();
       return;
     }
-    const info = infoFor.get(current);
-    const destination = info?.href ?? (info?.soon ? withBase(`/soon/${current}/`) : null);
+    const info = infoFor.get(chosen);
+    const destination = info?.href ?? (info?.soon ? withBase(`/soon/${chosen}/`) : null);
     if (destination) window.location.href = destination;
   });
 

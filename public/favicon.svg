@@ -2,16 +2,15 @@
   <!-- The monogram as the header wears it: a ring with a stem a third of the
        way across, the ring's own right side standing in for the D's bowl.
 
-       The mark's own ink on the site's own plaster, opaquely, rather than
-       following the chrome from black to white: Safari does not resolve
-       `prefers-color-scheme` inside a favicon, and Google's result rows, the
-       tab strip and the bookmark bar all composite a transparent mark onto
-       whatever ground they like — which is how the white-on-nothing copy came
-       to show as a white disc in a dark search result. Carrying the wall means
-       the mark reads the same everywhere, and reads as this site. It is what
-       the PNG fallbacks are drawn on too. See `scripts/build-icons.mjs`. -->
-  <rect width="100" height="100" fill="#d2ccc2"/>
-  <g fill="none" stroke="#16130f" stroke-width="9.5" stroke-linecap="round" transform="translate(50 50) scale(0.62) translate(-50 -50)">
+       The site's ink on nothing, flatly, rather than following the chrome from
+       black to white: Safari does not resolve `prefers-color-scheme` inside a
+       favicon, so the adaptive copy came out as its light-mode branch wherever
+       it landed. The ink is what does the work here, not a ground — every
+       place that draws this composites it onto something light, Google's
+       result rows onto a white disc, and a dark mark reads on all of them. It
+       is what the PNG fallbacks are drawn in too.
+       See `scripts/build-icons.mjs`. -->
+  <g fill="none" stroke="#16130f" stroke-width="9.5" stroke-linecap="round">
     <circle cx="50" cy="50" r="45"/>
     <line x1="28.4" y1="10.52" x2="28.4" y2="89.48"/>
   </g>

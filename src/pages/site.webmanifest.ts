@@ -18,7 +18,7 @@ const ICON = { sizes: "512x512", type: "image/png" } as const;
  * address it already holds, so the address has to be the thing that moves.
  * `src/layouts/Base.astro` stamps the same version on the `<link>`s.
  */
-export const ICON_VERSION = "3";
+export const ICON_VERSION = "4";
 const v = `?v=${ICON_VERSION}`;
 
 export const GET: APIRoute = () =>

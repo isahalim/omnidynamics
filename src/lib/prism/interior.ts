@@ -476,10 +476,23 @@ export async function createPrismInterior(
     }
   };
 
-  const settleAt = (value: number) =>
+  /**
+   * Resolves when the morph this was handed has arrived — or when it has been
+   * called off, which is the more interesting half.
+   *
+   * A morph can be redirected mid-flight: a second shape picked while the first
+   * is still opening, or the landing page's scroll crossing back while one is
+   * under way. The shape it was travelling to is then one it will never reach,
+   * so a wait written only against that value polls `requestAnimationFrame`
+   * forever — a loop nothing can stop, holding its caller's `finally` hostage
+   * with it. The token is which morph is the current one; a wait whose morph is
+   * no longer it stops waiting.
+   */
+  let morph = 0;
+  const settleAt = (value: number, token: number) =>
     new Promise<void>((resolve) => {
       const check = () => {
-        if (disposed || Math.abs(sphereMix - value) < 0.001) resolve();
+        if (disposed || token !== morph || Math.abs(sphereMix - value) < 0.001) resolve();
         else requestAnimationFrame(check);
       };
       check();
@@ -489,6 +502,7 @@ export async function createPrismInterior(
     morphDirection = value >= sphereMix ? 1 : -1;
     morphFrom = sphereMix;
     morphTo = value;
+    const token = ++morph;
     if (reduceMotion) {
       sphereMix = value;
       morphing = false;
@@ -496,7 +510,7 @@ export async function createPrismInterior(
     }
     morphStart = performance.now();
     morphing = true;
-    return settleAt(value);
+    return settleAt(value, token);
   };
 
   let sequence = 0;

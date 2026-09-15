@@ -67,15 +67,14 @@ const ogImage = new URL(`${base}/og.jpg?v=${OG_IMAGE_VERSION}`, Astro.site);
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="theme-color" content="#d2ccc2" />
     {/*
-      The mark, everywhere something asks for one: the ink mark on the site's
-      own plaster, opaquely, in every size. Nothing here is transparent or
-      adaptive any more. A transparent tile lets whatever draws it pick the
-      ground, and they do not agree — Google composites a result row's icon onto
-      a white disc, where the old white-on-nothing mark was a white disc, which
-      is what the search result was showing. Carrying the wall makes the tile a
-      chip of the page instead. Without `apple-touch-icon` iOS draws its own —
-      a grey square with the first letter of the title — which is what "Add to
-      Home Screen" was producing.
+      The mark, everywhere something asks for one: the ink mark on nothing, in
+      every size. Nothing here is adaptive — Safari does not resolve
+      `prefers-color-scheme` inside a favicon — and nothing carries a ground.
+      The ink is what does the work: these were white on nothing, which is a
+      white disc anywhere the drawer picks a light plate, and Google composites
+      a result row's icon onto exactly that. Without `apple-touch-icon` iOS
+      draws its own — a grey square with the first letter of the title — which
+      is what "Add to Home Screen" was producing.
 
       Each address carries `?v=`: Safari files favicons by URL and will not go
       back for a new one at an address it already has, so a mark that changes

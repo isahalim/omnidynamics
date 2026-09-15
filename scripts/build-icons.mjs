@@ -14,18 +14,31 @@
  * beyond node — the two strokes are a circle and a segment, and the distance to
  * each is exact.
  *
- * Every tile is the mark in the site's own ink on the site's own plaster,
- * opaquely, the way `favicon.svg` draws it. The white-on-nothing copy these
- * used to be was drawn for dark chrome and had no say in what it landed on:
- * Google composites a result row's icon onto a white disc, where a white mark
- * is a white disc, and that is what the search result was showing. A tile that
- * carries its own ground reads the same in every one of these places, and reads
- * as this site — the plaster is the wall the landing page is lit on.
+ * Every tile is the mark in the site's own ink on nothing, the way
+ * `favicon.svg` draws it. The ink is what does the work, not a ground: these
+ * used to be white on nothing, which is a white disc anywhere the drawer picks
+ * a light plate — Google composites a result row's icon onto exactly that, and
+ * a white disc is what the search result was showing. Dark on nothing reads on
+ * every one of those plates and keeps the tile out of the way of whatever is
+ * behind it.
  *
- * That makes the maskable tile the same drawing as the rest, at a smaller
- * coverage: Android cuts the corners to whatever shape the device likes, so the
- * mark is kept well inside the launcher's safe zone while the plaster bleeds
- * out to the edge behind it.
+ * The antialiased edge therefore fades out in alpha rather than towards a
+ * background colour: the ink is written flat across the whole tile and the
+ * coverage becomes the alpha, or the browser's own chrome would show as a
+ * fringe around every stroke.
+ *
+ * The maskable tile is the same drawing at a smaller coverage. Android cuts
+ * the corners to whatever shape the device likes, so the mark is kept well
+ * inside the launcher's safe zone; the launcher supplies the plate, and a dark
+ * mark is legible on the light one it picks.
+ *
+ * One place does pick a dark plate, and it is worth knowing before someone
+ * files it as a bug: iOS composites a transparent `apple-touch-icon` onto
+ * black, so a dark mark on nothing is a dark mark on black on the home screen.
+ * That is the cost of one drawing everywhere, and it is deliberate. If the home
+ * screen ever matters more than the uniformity, give that one entry a `ground`
+ * again — `render` takes one, and `png` writes three channels instead of four
+ * when it is opaque — rather than putting every tile back on a plate.
  */
 import { writeFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
@@ -36,10 +49,8 @@ const STEM_X = 28.4;
 const STEM_HALF = Math.sqrt(RADIUS ** 2 - (50 - STEM_X) ** 2);
 const STROKE = 9.5;
 
-/** The ink the mark is drawn in, and the plaster it is drawn on: `--ink` and
- * `--wall` from `src/layouts/Base.astro`, so the tile is a chip of the page. */
+/** The ink the mark is drawn in: `--ink` from `src/layouts/Base.astro`. */
 const INK = [0x16, 0x13, 0x0f];
-const GROUND = [0xd2, 0xcc, 0xc2];
 /** How much of the tile the mark takes, leaving iOS its rounding margin, and
  * how much of the maskable one, leaving the launcher its safe zone. */
 const COVERAGE = 0.62;
@@ -63,8 +74,8 @@ const ICONS = [
 
 for (const icon of ICONS) {
   const { size, coverage = COVERAGE } = icon;
-  writeFileSync(`public/${icon.file}`, png(render(size, GROUND, coverage), size));
-  console.log(`public/${icon.file}  ${size}x${size}  on plaster`);
+  writeFileSync(`public/${icon.file}`, png(render(size, coverage), size));
+  console.log(`public/${icon.file}  ${size}x${size}  ink on nothing`);
 }
 
 /** Distance from a point to the mark, in the 100x100 box, negative inside. */
@@ -76,16 +87,15 @@ function markDistance(x, y) {
 }
 
 /**
- * A tile with the mark centred on it, composited onto `ground`.
+ * A tile with the mark centred on it, in ink on nothing.
  *
- * Every tile carries its ground, so the antialiased edge always has a known
- * colour to fade towards. A transparent tile would leave that edge to whatever
- * the browser drew behind it, and — more to the point — would let each place
- * the tile lands choose its own ground, which is how the same drawing came out
- * as a pale disc in a dark search result and a dark mark on a light one.
+ * The ink is written flat across the whole tile and the coverage becomes the
+ * alpha, so the antialiased edge fades out in transparency rather than towards
+ * a background colour — which is what would otherwise leave a fringe once the
+ * browser drew the tile on its own chrome.
  */
-function render(size, ground = GROUND, tileCoverage = COVERAGE) {
-  const pixels = new Uint8Array(size * size * 3);
+function render(size, tileCoverage = COVERAGE) {
+  const pixels = new Uint8Array(size * size * 4);
   const scale = 100 / (size * tileCoverage);
   const origin = 50 - (size / 2) * scale;
   const step = scale / SUPERSAMPLE;
@@ -99,19 +109,16 @@ function render(size, ground = GROUND, tileCoverage = COVERAGE) {
           if (markDistance(x, y) <= 0) inside++;
         }
       const coverage = inside / (SUPERSAMPLE * SUPERSAMPLE);
-      const offset = (py * size + px) * 3;
-      for (let channel = 0; channel < 3; channel++)
-        pixels[offset + channel] = Math.round(
-          ground[channel] * (1 - coverage) + INK[channel] * coverage
-        );
+      const offset = (py * size + px) * 4;
+      for (let channel = 0; channel < 3; channel++) pixels[offset + channel] = INK[channel];
+      pixels[offset + 3] = Math.round(255 * coverage);
     }
   return pixels;
 }
 
-/** A minimal 8-bit truecolour PNG. Every tile is opaque, so there is no alpha
- * channel to write. */
+/** A minimal 8-bit truecolour PNG with an alpha channel. */
 function png(pixels, size) {
-  const stride = size * 3;
+  const stride = size * 4;
   const raw = Buffer.alloc((stride + 1) * size);
   for (let y = 0; y < size; y++) {
     raw[y * (stride + 1)] = 0; // filter: none
@@ -121,7 +128,7 @@ function png(pixels, size) {
   header.writeUInt32BE(size, 0);
   header.writeUInt32BE(size, 4);
   header[8] = 8; // bit depth
-  header[9] = 2; // colour type: truecolour
+  header[9] = 6; // colour type: truecolour with alpha
   return Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
     chunk("IHDR", header),
