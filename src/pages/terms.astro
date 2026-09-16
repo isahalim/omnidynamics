@@ -12,6 +12,16 @@
  *
  * It shares the prose shell with `privacy.astro`: same measure, same header,
  * same rule. A reader who has read one should not have to learn a second page.
+ *
+ * Two things it is deliberately careful about. OmniDynamics is new and is not
+ * incorporated yet, so nothing here may imply a company that does not exist:
+ * there is no entity name, no registration number, no registered office, no ™
+ * or ® on the mark, and the agreement is with the people who run it. And the
+ * one convention this page cannot follow is the American habit of setting
+ * disclaimers in capitals for conspicuousness — the house style reserves
+ * uppercase for labels and forbids it as emphasis (DESIGN.md §10), and the
+ * section headings here are already set uppercase and tracked, which is where
+ * the label belongs.
  */
 import Base from "../layouts/Base.astro";
 import Logo from "../components/Logo.astro";
@@ -54,14 +64,29 @@ const calHost = (() => {
 
       <div class="rule" aria-hidden="true"></div>
 
+      <h2>Who we are</h2>
+      <p>
+        OmniDynamics is a new venture based in Seattle, Washington. It is not
+        incorporated yet — there is no company, no registration number and no
+        registered office to give you — so "we" on this page means the people
+        who build and run it, and this agreement is with them. If and when it is
+        incorporated, the entity takes over this agreement on the same terms and
+        this page will say so and carry the date it changed.
+      </p>
+      <p class="thin">
+        Being early is the reason several things below are smaller than they
+        would be from a large company: there is no service level, no support
+        commitment and no warranty. What there is instead is a person reading
+        {" "}<a href={`mailto:${EMAIL}`}>{EMAIL}</a>.
+      </p>
+
       <h2>The agreement</h2>
       <p>
-        These terms are between you and OmniDynamics. They cover this site,
-        anything you reach from it that we run — signing in, booking a demo, and
-        the systems the landing page opens — and any evaluation or deployment we
-        do for you that has no separate signed contract. Using any of it means
-        you accept them. If you do not, the honest thing is to close the tab,
-        and nothing is held either way.
+        These terms cover this site, anything you reach from it that we run —
+        signing in, booking a demo, and the systems the landing page opens — and
+        any evaluation or deployment we do for you that has no separate signed
+        contract. Using any of it means you accept them. If you do not, the
+        honest thing is to close the tab, and nothing is held either way.
       </p>
       <p>
         Where we have signed something else with you — an order form, a pilot
@@ -214,9 +239,11 @@ const calHost = (() => {
       <h2>What is ours</h2>
       <p>
         The site, our systems, the name, the mark and the wordmark are ours or
-        our licensors'. These terms give you permission to use the service, not
-        ownership of it, and nothing here transfers our intellectual property to
-        you.
+        our licensors'. They are unregistered — there is no trademark
+        registration behind the name or the monogram, and you will not find a ™
+        or an ® anywhere on this site — but they are still ours, and these terms
+        give you permission to use the service rather than ownership of any of
+        it. Please do not pass off your own work as ours.
       </p>
       <p>
         Parts of the page are other people's work, used under their licences and
@@ -300,10 +327,14 @@ const calHost = (() => {
         promise that it will be uninterrupted, error-free, or that any result
         will be accurate, complete or fit for a decision you are about to make.
       </p>
-      <p class="thin">
-        Some of this is early work and is described that way on the pages where
-        it appears. The 3D wall needs WebGPU and will not run everywhere; when a
-        browser cannot draw it the page says so rather than pretending.
+      <p>
+        There is no uptime commitment and no support commitment, because we are
+        not in a position to make one honestly: this is a small, new team, and
+        any of it may change, move or be withdrawn. Most of what is here is
+        described as early on the page where it appears — three of the five
+        systems in the glass have nothing behind them yet but a page saying so.
+        The 3D wall needs WebGPU and will not run everywhere; when a browser
+        cannot draw it the page says so rather than pretending.
       </p>
 
       <h2>Liability</h2>
@@ -312,23 +343,29 @@ const calHost = (() => {
         indirect, incidental, special or consequential loss, or for lost
         profits, revenue, goodwill or data, however it arises. Our total
         liability for any claim connected with the service is capped at what you
-        paid us for it in the twelve months before the claim, or £100 if you
-        paid us nothing.
+        paid us for it in the twelve months before the claim, or US$100 if you
+        paid us nothing — which today is everyone, because nothing here costs
+        anything.
       </p>
       <p class="thin">
         Nothing here limits liability that cannot lawfully be limited —
-        including for death or personal injury caused by negligence, or for
-        fraud — and if you are a consumer, your statutory rights are unaffected
-        by anything on this page.
+        including for death or personal injury caused by our negligence, or for
+        fraud or fraudulent misrepresentation — and if you are a consumer, your
+        statutory rights are unaffected by anything on this page. Some states
+        and countries do not allow these exclusions, and where that is so they
+        do not apply to you.
       </p>
 
-      <h2>Your indemnity</h2>
+      <h2>If you cause a claim</h2>
       <p>
         If someone brings a claim against us because of what you sent us, what
-        you did with what came out, or a breach of these terms by you, you will
-        cover the reasonable cost of defending and settling it. We will tell you
-        about the claim promptly and let you run the defence, and we will not
-        settle it in a way that binds you without asking.
+        you did with what came out, or your breach of these terms, you will
+        cover the reasonable, direct cost of defending and settling it. We will
+        tell you about the claim promptly, let you run the defence with counsel
+        of your choosing, and not settle it in a way that binds you without
+        asking. This does not apply to a claim that our own act or omission
+        caused, and it does not apply at all if you are using the site as a
+        consumer rather than for a business.
       </p>
 
       <h2>Ending it</h2>
@@ -353,26 +390,35 @@ const calHost = (() => {
 
       <h2>Which law applies</h2>
       <p>
-        These terms are governed by the law of the place where OmniDynamics is
-        established, and the courts there have jurisdiction — except that if you
-        are a consumer, you keep the protection of the mandatory law of the
-        country you live in and may bring a claim in its courts. Before either
-        of us litigates, write to
-        {" "}<a href={`mailto:${EMAIL}`}>{EMAIL}</a>: most of this is settled in
-        an email.
+        We are in Seattle, so these terms are governed by the law of the State
+        of Washington, USA, without regard to its conflict-of-laws rules, and
+        any dispute goes to the state or federal courts sitting in King County,
+        Washington. Either of us may still use small claims court, wherever it
+        is, for something small enough to belong there.
+      </p>
+      <p>
+        If you are a consumer outside the United States, none of that takes away
+        the mandatory protection of the law where you live, or your right to
+        bring a claim in your own courts. And before either of us goes near a
+        court, write to <a href={`mailto:${EMAIL}`}>{EMAIL}</a> and give us
+        thirty days: at this size, essentially everything is settled in an
+        email.
       </p>
       <p class="thin">
-        If a clause here turns out to be unenforceable, the rest stands. A right
-        we do not enforce immediately is not a right we have given up. You may
-        not transfer this agreement without asking us; we may transfer it as
-        part of a merger or sale of the business, and will say so if we do.
+        If a clause here turns out to be unenforceable, the rest stands, and a
+        court should read the unenforceable part down rather than throw the page
+        out. A right we do not enforce immediately is not a right we have given
+        up. You may not transfer this agreement without asking us; we may
+        transfer it to the entity that incorporates this venture, or to whoever
+        takes the work on, and will say so on this page if we do.
       </p>
 
       <h2>Contact</h2>
       <p>
         Questions about any of this go to
         {" "}<a href={`mailto:${EMAIL}`}>{EMAIL}</a>, and are answered by a
-        person.
+        person in Seattle, Washington. There is no postal address to publish
+        yet; when there is one, it will be here.
       </p>
 
       <p class="back"><a class="clicky" href={withBase("/")}>Back to the site</a></p>

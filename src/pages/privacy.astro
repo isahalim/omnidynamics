@@ -14,7 +14,7 @@ import Logo from "../components/Logo.astro";
 import { CAL, CAL_READY, EMAIL, PROVIDER_HOST, ROUTES, SIGN_IN_READY } from "../lib/auth/config";
 import { withBase } from "../lib/base";
 
-const UPDATED = "14 September 2026";
+const UPDATED = "15 September 2026";
 const calHost = (() => {
   try {
     return new URL(CAL.origin).host;
@@ -182,6 +182,23 @@ const calHost = (() => {
         comes first. Cached page state: until you sign out, or a different
         account signs in on that browser. Bookings and the mail around them:
         kept while we are in touch, and deleted on request.
+      </p>
+
+      <h2>Where we are</h2>
+      <p>
+        Seattle, Washington, in the United States. OmniDynamics is new and is
+        not incorporated yet, so there is no company to name as the controller
+        and no registered office to give you — it is the people who run this
+        site, reachable at <a href={`mailto:${EMAIL}`}>{EMAIL}</a>. That will be
+        replaced with an entity and an address the moment there is one.
+      </p>
+      <p>
+        So if you are outside the United States, writing to us or booking a call
+        sends what you write there. We have no data transfer agreement with you
+        and are not going to pretend otherwise; what there is to transfer is a
+        booking, a thread of mail, and — while the tab is open — the identity
+        token that never leaves your own browser. The parties handling any of it
+        are the three listed above and nobody else.
       </p>
 
       <h2>Your say</h2>
