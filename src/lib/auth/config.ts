@@ -56,6 +56,7 @@ export const ROUTES = {
   home: `${BASE}/`,
   signIn: `${BASE}/signin/`,
   account: `${BASE}/account/`,
+  terms: `${BASE}/terms/`,
   privacy: `${BASE}/privacy/`,
   book: `${BASE}/book/`,
 } as const;

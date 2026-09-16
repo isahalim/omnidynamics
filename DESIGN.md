@@ -610,6 +610,8 @@ that paints its own ground (§2).
   columns with the identity spanning both.
 - **Group heads are section heads** (§3): `0.75rem`, 600, uppercase, `0.12em`,
   `--muted`. Links are `0.9375rem` at `0.68` opacity, going to `1` on hover.
+- **Legal is two links**, terms and privacy, and both pages share the prose
+  shell of §4 — same 48rem measure, same header, same rule.
 - **The copyright notice** is fine print, centred, under a full-width hairline in
   `--line` — the one place a full-width divider is right, because it separates
   the page's content from the notice under all of it rather than two movements
@@ -1200,7 +1202,7 @@ Then, in order:
 | Landing composition, segmented rail | `src/components/Prism.astro` |
 | The floor (site footer) and its curved corners | `src/components/Footer.astro` |
 | Split composition (copy + object) | `src/pages/signin.astro`, `src/pages/soon/[state].astro` |
-| Prose page | `src/pages/privacy.astro`, `src/pages/404.astro` |
+| Prose page | `src/pages/privacy.astro`, `src/pages/terms.astro`, `src/pages/404.astro` |
 | Glass framing a third-party embed | `src/pages/book.astro` |
 | Manifest, icons, theme colour | `src/pages/site.webmanifest.ts`, `scripts/build-icons.mjs` |
 | Scroll handover, and the room emptying for the floor | `src/components/Prism.astro`, `src/pages/index.astro` |

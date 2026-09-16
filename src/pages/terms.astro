@@ -1,0 +1,492 @@
+---
+/**
+ * The terms of service.
+ *
+ * Written the way the privacy policy next to it is: as a description of what
+ * this software actually does and what we actually promise, so that every
+ * clause can be checked against a file in this repository. The disclaimers are
+ * the ones a platform for evaluating physical AI agents has to make out loud —
+ * an evaluation is evidence, not a certificate, and a system that moves in the
+ * world is the operator's responsibility. If the code changes, this changes
+ * with it.
+ *
+ * It shares the prose shell with `privacy.astro`: same measure, same header,
+ * same rule. A reader who has read one should not have to learn a second page.
+ */
+import Base from "../layouts/Base.astro";
+import Logo from "../components/Logo.astro";
+import { CAL, CAL_READY, EMAIL, PROVIDER_HOST, ROUTES, SIGN_IN_READY } from "../lib/auth/config";
+import { withBase } from "../lib/base";
+
+const UPDATED = "15 September 2026";
+const calHost = (() => {
+  try {
+    return new URL(CAL.origin).host;
+  } catch {
+    return CAL.origin;
+  }
+})();
+---
+
+<Base
+  title="Terms — OmniDynamics"
+  description="The terms you use this site and our systems under, and what we do and do not promise."
+>
+  <div class="page">
+    <header class="top">
+      <a class="brand clicky" href={withBase("/")}>
+        <Logo size={30} />
+        <span class="wordmark">OmniDynamics</span>
+      </a>
+      <nav class="links">
+        {SIGN_IN_READY && <a class="clicky" href={ROUTES.account}>Your account</a>}
+        <a class="clicky" href={ROUTES.book}>Book a demo</a>
+      </nav>
+    </header>
+
+    <main>
+      <h1>Terms</h1>
+      <p class="lede">
+        What you may do with this site and our systems, what we promise, and
+        what we do not.
+      </p>
+      <p class="stamp">Last updated {UPDATED}</p>
+
+      <div class="rule" aria-hidden="true"></div>
+
+      <h2>The agreement</h2>
+      <p>
+        These terms are between you and OmniDynamics. They cover this site,
+        anything you reach from it that we run — signing in, booking a demo, and
+        the systems the landing page opens — and any evaluation or deployment we
+        do for you that has no separate signed contract. Using any of it means
+        you accept them. If you do not, the honest thing is to close the tab,
+        and nothing is held either way.
+      </p>
+      <p>
+        Where we have signed something else with you — an order form, a pilot
+        agreement, a data processing agreement — that document wins on anything
+        it covers, and these terms fill the gaps.
+      </p>
+      <p class="thin">
+        If you are agreeing on behalf of a company, you are saying you are
+        allowed to, and "you" means the company from there on.
+      </p>
+
+      <h2>Who may use it</h2>
+      <p>
+        You need to be 16 or older, and legally able to enter an agreement. The
+        site is not for children and we do not knowingly collect anything from
+        anyone under 16 — see the <a href={ROUTES.privacy}>privacy policy</a>.
+        Do not use any of this where doing so would break the law that applies
+        to you, including export control and sanctions law.
+      </p>
+
+      <h2>Your account</h2>
+      {SIGN_IN_READY ? (
+        <>
+          <p>
+            Signing in is <strong>Sign in with Google</strong>, and you
+            authenticate at <span class="host">{PROVIDER_HOST}</span> rather
+            than here. So the credential is Google's to protect and yours to
+            keep: we never see your password, one-time code or passkey, and we
+            cannot reset any of them. Keep control of the Google account you
+            sign in with, and tell us at
+            {" "}<a href={`mailto:${EMAIL}`}>{EMAIL}</a> if you lose it.
+          </p>
+          <p>
+            One account is one person. Do not share it, do not sign in as
+            somebody else, and do not use an account you are not entitled to.
+            You are answerable for what happens under yours.
+          </p>
+          <p class="thin">
+            There is no server here to hold a session, so signing out is a local
+            act: the token is discarded from the tab. Your account page says
+            exactly what is held and where.
+          </p>
+        </>
+      ) : (
+        <p>
+          Sign-in is not enabled on this build of the site, so there is no
+          account to hold and nothing in this section applies yet.
+        </p>
+      )}
+
+      <h2>Acceptable use</h2>
+      <p>
+        Use this the way it is meant to be used. In particular, do not:
+      </p>
+      <ul class="who">
+        <li>
+          <strong>Break in.</strong> No probing, scanning or circumventing
+          authentication, rate limits or any other control; no accessing data,
+          accounts or systems that are not yours. Security research is welcome
+          — write to us first and we will tell you what is in scope.
+        </li>
+        <li>
+          <strong>Break it.</strong> No load intended to degrade the service, no
+          automated collection beyond ordinary crawling of the public pages, and
+          nothing that interferes with another user.
+        </li>
+        <li>
+          <strong>Take it apart to rebuild it.</strong> No reverse engineering,
+          decompiling or extracting our models, weights, prompts, shaders or
+          evaluation harness in order to train a competing system or resell
+          ours. Reading the client-side source your browser was sent is fine —
+          it was sent to you.
+        </li>
+        <li>
+          <strong>Feed it what you have no right to.</strong> Do not upload
+          anything you do not own or have permission to use, and do not upload
+          personal data about other people without a lawful basis for it.
+        </li>
+        <li>
+          <strong>Use it against people.</strong> No unlawful, infringing,
+          deceptive or harassing use, and nothing intended to harm anyone. We
+          do not permit use of our systems to make autonomous decisions about a
+          person's safety, rights, employment, credit or liberty.
+        </li>
+      </ul>
+      <p class="thin">
+        We may suspend access without notice if something here is being broken
+        and the service or another user is at risk, and we will say why as soon
+        as we can.
+      </p>
+
+      <h2>What you put in</h2>
+      <p>
+        Your content stays yours. That means your prompts, your recordings, your
+        logs, your models, your evaluation data — all of it. You give us the
+        narrow permission we need to run what you asked for: to store,
+        transmit, process and display it, and to make the copies that running it
+        requires. That permission lasts as long as you keep the content with us
+        and ends when it is deleted.
+      </p>
+      <p>
+        We do not train general-purpose models on your content or hand it to
+        anyone else to train theirs. If we ever want to use something of yours
+        to improve a system beyond your own deployment, we will ask first and
+        you may say no without losing the service.
+      </p>
+      <p>
+        You are responsible for having the rights to what you send, and for
+        keeping your own copy of anything you cannot afford to lose.
+      </p>
+
+      <h2>What comes out</h2>
+      <p>
+        Our systems generate things — scripts, scenes, briefings, attention
+        fields, evaluation reports. As between us, that output is yours to use.
+        Two limits are worth stating plainly, because they are properties of the
+        technology and not fine print:
+      </p>
+      <p>
+        <strong>Output can be wrong.</strong> These are probabilistic systems.
+        They can be confidently incorrect, and the same input can produce
+        different results. Check anything that matters before you rely on it,
+        and keep a person in the loop wherever a mistake would cost something.
+      </p>
+      <p>
+        <strong>Output is not unique to you.</strong> A similar prompt from
+        somebody else can produce similar output, so we cannot promise your
+        results are original or exclusive, and we make no claim that they are
+        protectable or free of third-party rights.
+      </p>
+
+      <h2>Evaluations and agents</h2>
+      <p>
+        This is the part specific to what we build. Our evaluation platforms
+        record and explain what a physical AI agent attended to and why; an
+        evaluation is <em>evidence about a system's behaviour under the
+        conditions it was tested in</em>, and nothing more. It is not a
+        certification, not a safety case, not regulatory approval, and not a
+        licence to deploy.
+      </p>
+      <p>
+        If you operate a drone, a manipulator, a robot or any other system that
+        moves in the world, you remain its operator. Site safety, human
+        supervision, risk assessment, insurance, airspace and every applicable
+        regulation stay with you. Do not use our output as the sole basis for
+        letting such a system run unsupervised around people, and do not
+        represent a result of ours as approval by anyone.
+      </p>
+
+      <h2>What is ours</h2>
+      <p>
+        The site, our systems, the name, the mark and the wordmark are ours or
+        our licensors'. These terms give you permission to use the service, not
+        ownership of it, and nothing here transfers our intellectual property to
+        you.
+      </p>
+      <p>
+        Parts of the page are other people's work, used under their licences and
+        credited in the repository — the glass on the landing page is vendored
+        from <a href="https://github.com/vercel-labs/vgpu" rel="noreferrer">vgpu</a>
+        {" "}under the MIT licence, with its notice kept alongside the code. Those
+        licences govern those parts.
+      </p>
+      <p class="thin">
+        If you think something here infringes your copyright, write to
+        {" "}<a href={`mailto:${EMAIL}`}>{EMAIL}</a> with enough detail to find
+        it and we will look at it and act.
+      </p>
+
+      <h2>Other companies</h2>
+      <p>
+        Three things on this site are run by somebody else, and using them
+        brings their terms with it:
+      </p>
+      <ul class="who">
+        {SIGN_IN_READY && (
+          <li>
+            <strong>Google</strong> — sign-in, under
+            {" "}<a href="https://policies.google.com/terms" rel="noreferrer">its terms</a>.
+          </li>
+        )}
+        {CAL_READY && (
+          <li>
+            <strong>{calHost}</strong> — the booking form and the video room the
+            call is held in, under
+            {" "}<a href="https://cal.com/terms" rel="noreferrer">Cal.com's terms</a>.
+          </li>
+        )}
+        <li>
+          <strong>Cloudflare</strong> — serves these files.
+        </li>
+      </ul>
+      <p>
+        Links out to a system's own site are the same: once you leave, you are
+        on their terms, and we are not responsible for what is there.
+      </p>
+
+      <h2>Demos and bookings</h2>
+      {CAL_READY ? (
+        <p>
+          A booked call is a conversation, not a contract. Either of us may move
+          or cancel it — use the link in the confirmation, or reply to it — and
+          nothing said in a demo is a commitment until it is written down
+          somewhere both of us signed.
+        </p>
+      ) : (
+        <p>
+          Booking is not enabled on this build. Mail to
+          {" "}<a href={`mailto:${EMAIL}`}>{EMAIL}</a> reaches us directly, and
+          the same applies: a conversation is not a contract.
+        </p>
+      )}
+
+      <h2>What it costs</h2>
+      <p>
+        Nothing, today. This site, signing in and booking a demo are free, and
+        there is no payment form anywhere on it. If we introduce a paid plan we
+        will say what it costs before you owe anything, and any fees, taxes,
+        renewal and refund terms will be set out where you buy it rather than
+        buried here.
+      </p>
+
+      <h2>Privacy</h2>
+      <p>
+        What we collect, who processes it and how to get rid of it is on the
+        {" "}<a href={ROUTES.privacy}>privacy policy</a>, which is part of these
+        terms. It is written next to the code it describes and says the same
+        thing this page does: there is very little, and you can see all of it.
+      </p>
+
+      <h2>No warranty</h2>
+      <p>
+        The service is provided as it is and as it is available. To the extent
+        the law allows, we disclaim the implied warranties — merchantability,
+        fitness for a particular purpose, non-infringement — and we do not
+        promise that it will be uninterrupted, error-free, or that any result
+        will be accurate, complete or fit for a decision you are about to make.
+      </p>
+      <p class="thin">
+        Some of this is early work and is described that way on the pages where
+        it appears. The 3D wall needs WebGPU and will not run everywhere; when a
+        browser cannot draw it the page says so rather than pretending.
+      </p>
+
+      <h2>Liability</h2>
+      <p>
+        To the extent the law allows, neither of us is liable to the other for
+        indirect, incidental, special or consequential loss, or for lost
+        profits, revenue, goodwill or data, however it arises. Our total
+        liability for any claim connected with the service is capped at what you
+        paid us for it in the twelve months before the claim, or £100 if you
+        paid us nothing.
+      </p>
+      <p class="thin">
+        Nothing here limits liability that cannot lawfully be limited —
+        including for death or personal injury caused by negligence, or for
+        fraud — and if you are a consumer, your statutory rights are unaffected
+        by anything on this page.
+      </p>
+
+      <h2>Your indemnity</h2>
+      <p>
+        If someone brings a claim against us because of what you sent us, what
+        you did with what came out, or a breach of these terms by you, you will
+        cover the reasonable cost of defending and settling it. We will tell you
+        about the claim promptly and let you run the defence, and we will not
+        settle it in a way that binds you without asking.
+      </p>
+
+      <h2>Ending it</h2>
+      <p>
+        You may stop at any time: close the tab, and — where sign-in is enabled
+        — sign out and ask us to delete what is left. We may suspend or end
+        access if these terms are broken, if the law requires it, or if we
+        retire a system, and we will give reasonable notice unless the reason is
+        that giving notice would make things worse. The sections that are meant
+        to outlive the agreement do: what is ours, the disclaimers, liability,
+        your indemnity, and this one.
+      </p>
+
+      <h2>Changes</h2>
+      <p>
+        This page is versioned alongside the code it describes. Material changes
+        move the date at the top, and anything that materially reduces your
+        rights will be announced on the site before it takes effect rather than
+        applied quietly. Continuing to use the service after a change means you
+        accept the new version; if you do not, stop using it.
+      </p>
+
+      <h2>Which law applies</h2>
+      <p>
+        These terms are governed by the law of the place where OmniDynamics is
+        established, and the courts there have jurisdiction — except that if you
+        are a consumer, you keep the protection of the mandatory law of the
+        country you live in and may bring a claim in its courts. Before either
+        of us litigates, write to
+        {" "}<a href={`mailto:${EMAIL}`}>{EMAIL}</a>: most of this is settled in
+        an email.
+      </p>
+      <p class="thin">
+        If a clause here turns out to be unenforceable, the rest stands. A right
+        we do not enforce immediately is not a right we have given up. You may
+        not transfer this agreement without asking us; we may transfer it as
+        part of a merger or sale of the business, and will say so if we do.
+      </p>
+
+      <h2>Contact</h2>
+      <p>
+        Questions about any of this go to
+        {" "}<a href={`mailto:${EMAIL}`}>{EMAIL}</a>, and are answered by a
+        person.
+      </p>
+
+      <p class="back"><a class="clicky" href={withBase("/")}>Back to the site</a></p>
+    </main>
+  </div>
+</Base>
+
+<style>
+  /* The prose shell, the same one `privacy.astro` uses: a 48rem measure on the
+     plaster, the header at the top, and no surface of its own anywhere. Kept as
+     a copy rather than lifted into a layout because the two pages are the only
+     two of their kind and a shared shell for two documents is a shell nobody
+     can read — if a third arrives, that is the moment to extract it. */
+  .page {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    min-block-size: 100dvh;
+    max-inline-size: 48rem;
+    margin-inline: auto;
+    padding: clamp(1rem, 2.5vw, 1.75rem) clamp(1.25rem, 4vw, 2.5rem)
+      clamp(3rem, 8vh, 5rem);
+    color: var(--on-wall);
+  }
+
+  .top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-block-end: clamp(2rem, 6vh, 3.5rem);
+  }
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    text-decoration: none;
+    color: inherit;
+    border-radius: 999px;
+  }
+  .wordmark { font-size: 1rem; font-weight: 500; letter-spacing: -0.01em; }
+  .links { display: flex; gap: clamp(1rem, 2.5vw, 2rem); font-size: 0.9375rem; }
+  .links a { color: inherit; text-decoration: none; opacity: 0.62; transition: opacity 0.2s ease; }
+  .links a:hover { opacity: 1; }
+
+  h1 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: clamp(3rem, 9vw, 5.5rem);
+    line-height: 0.9;
+    letter-spacing: -0.02em;
+  }
+
+  .lede {
+    margin: clamp(0.9rem, 2.5vh, 1.4rem) 0 0;
+    font-size: clamp(1.15rem, 2.2vw, 1.5rem);
+    line-height: 1.3;
+    font-weight: 300;
+    letter-spacing: -0.015em;
+  }
+
+  .stamp {
+    margin: 0.65rem 0 0;
+    font-size: 0.8125rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .rule {
+    inline-size: min(100%, 22rem);
+    block-size: 1px;
+    margin-block: clamp(1.5rem, 4vh, 2.5rem);
+    background: currentColor;
+    opacity: 0.28;
+  }
+
+  h2 {
+    margin: clamp(2rem, 5vh, 2.75rem) 0 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  p {
+    margin: 0 0 0.9rem;
+    font-size: 1.0625rem;
+    line-height: 1.62;
+    max-inline-size: 38rem;
+  }
+  p:last-of-type { margin-block-end: 0; }
+  .thin { font-size: 0.9375rem; color: var(--muted); }
+
+  a { color: inherit; text-underline-offset: 0.22em; }
+  .host, strong { color: var(--ink); font-weight: 600; }
+
+  /* The one list shape this page needs: a clause per line, its first few words
+     carrying the point, at a measure that does not run past the paragraphs. */
+  .who {
+    margin: 0 0 0.9rem;
+    padding-inline-start: 1.1rem;
+    display: grid;
+    gap: 0.5rem;
+    font-size: 1rem;
+    line-height: 1.55;
+    max-inline-size: 38rem;
+  }
+
+  .back {
+    margin-block-start: clamp(2.5rem, 7vh, 4rem);
+    font-size: 0.9375rem;
+  }
+</style>
