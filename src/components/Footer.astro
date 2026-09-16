@@ -1,0 +1,323 @@
+---
+/**
+ * The floor the room stands on.
+ *
+ * The site is one lit wall with a shape on it, and it used to end wherever the
+ * scroll ran out — which left the policy link, every system and every way of
+ * getting in touch crowded into the header or reachable only from the glass.
+ * This is the other surface: the wall stops with a curved bottom edge and a
+ * quieter grey sheet carries on underneath it, holding the things a reader
+ * looks for at the end of a page rather than at the start.
+ *
+ * It paints its own ground, which is the one place on the site where that is
+ * allowed (DESIGN.md §2, §13) — the plaster is the room, and this is where the
+ * room ends.
+ */
+import Logo from "./Logo.astro";
+import { EMAIL, ROUTES, SIGN_IN_READY } from "../lib/auth/config";
+import { PRISM_STATES } from "../lib/glass/models";
+import { withBase } from "../lib/base";
+
+/** The company page, which is the only account the site has anywhere else. */
+const LINKEDIN = "https://www.linkedin.com/company/omnidynamicsdev";
+
+/**
+ * The year on the notice. Written out rather than read from the clock: this is
+ * a static build, so `new Date()` would pin whatever year the deploy happened
+ * in and then quietly go stale — a number you can see in the source and change
+ * on purpose beats one that is wrong without saying so.
+ */
+const YEAR = 2026;
+
+/**
+ * Every system the picker holds, pointing where a click on the shape points:
+ * its own site if it has one, its coming-soon page if that is all there is.
+ * One list, so a system added to the glass appears down here too.
+ */
+const systems = PRISM_STATES.flatMap((state) => {
+  const href = state.href ?? (state.soon ? withBase(`/soon/${state.id}/`) : null);
+  return href ? [{ label: state.label, href, away: Boolean(state.href) }] : [];
+});
+---
+
+<footer class="floor">
+  {/* The wall's bottom corners, cut out of the floor rather than drawn on the
+      wall: the plaster is a full-viewport canvas and cannot be given a radius
+      without taking the shape standing on it with it. Each of these is a square
+      the size of the radius, sitting on the last band of the wall, holding a
+      transparent rounded corner whose *outside* is filled by a spread shadow —
+      so what is left is the sliver of grey the curve has freed, antialiased
+      along the arc the way a real border-radius is. */}
+  <span class="corner start" aria-hidden="true"><span></span></span>
+  <span class="corner end" aria-hidden="true"><span></span></span>
+
+  <div class="inner">
+    <div class="cols">
+      <div class="who">
+        {/* Identity, not navigation: the way home is the brand in the header,
+            and a second link to the page you are on is noise. */}
+        <div class="brand">
+          <Logo size={30} />
+          <span class="wordmark">OmniDynamics</span>
+        </div>
+
+        <p class="blurb">
+          Scalable agentic systems, and the harness that records what a physical
+          AI agent attended to and why.
+        </p>
+
+        <a class="social clicky" href={LINKEDIN} rel="noreferrer">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
+            <circle cx="3.9" cy="3.6" r="2.5" />
+            <rect x="1.4" y="8.6" width="5" height="14" />
+            <path d="M8.9 8.6h5v1.9a5.6 5.6 0 0 1 9.1 4.4v7.7h-5v-7.2a2.05 2.05 0 0 0-4.1 0v7.2h-5z" />
+          </svg>
+          <span class="sr-only">OmniDynamics on LinkedIn</span>
+        </a>
+      </div>
+
+      <nav class="group" aria-labelledby="floor-product">
+        <h2 class="head" id="floor-product">Product</h2>
+        <ul>
+          {systems.map((system) => (
+            <li>
+              <a href={system.href} rel={system.away ? "noreferrer" : undefined}>
+                {system.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </nav>
+
+      <nav class="group" aria-labelledby="floor-company">
+        <h2 class="head" id="floor-company">Company</h2>
+        <ul>
+          <li><a href={ROUTES.book}>Book a demo</a></li>
+          <li><a href={`mailto:${EMAIL}`}>Contact</a></li>
+        </ul>
+      </nav>
+
+      {SIGN_IN_READY && (
+        <nav class="group" aria-labelledby="floor-account">
+          <h2 class="head" id="floor-account">Account</h2>
+          <ul>
+            <li><a href={ROUTES.signIn}>Sign in</a></li>
+            <li><a href={ROUTES.account}>Your account</a></li>
+          </ul>
+        </nav>
+      )}
+
+      <nav class="group" aria-labelledby="floor-legal">
+        <h2 class="head" id="floor-legal">Legal</h2>
+        <ul>
+          <li><a href={ROUTES.privacy}>Privacy</a></li>
+        </ul>
+      </nav>
+    </div>
+
+    <p class="notice"><span class="sign">©</span> {YEAR} OmniDynamics</p>
+  </div>
+</footer>
+
+<style>
+  .floor {
+    --radius: clamp(1.25rem, 3.5vw, 2.25rem);
+    position: relative;
+    /* Over the page shell, which sits at 2. Not for the look of it — the room
+       has emptied itself by the time the grey arrives (see `--room` in
+       `src/components/Prism.astro`) — but for the pointer: the stage stays
+       pinned to the whole viewport to the end of the scroll, and the invisible
+       button the glass is fitted into covers the middle of it. Underneath the
+       shell, every link in the top half of the floor would be a click on the
+       shape instead. */
+    z-index: 3;
+    background: var(--floor);
+    color: var(--on-wall);
+    /* A band of bare wall above the grey, the height of the page's header.
+       It is the room the header leaves through — see `.reel.reeling` in
+       `src/components/Prism.astro`. `--top-band` is published only by a page
+       with a pinned header, so on every other page this is nothing. */
+    margin-block-start: var(--top-band, 0px);
+  }
+
+  .corner {
+    position: absolute;
+    inset-block-start: calc(-1 * var(--radius));
+    inline-size: var(--radius);
+    block-size: var(--radius);
+    /* Holds the shadow to this one corner. Without it the spread paints across
+       the whole of the wall's last band. */
+    overflow: clip;
+  }
+  .corner.start { inset-inline-start: 0; }
+  .corner.end { inset-inline-end: 0; }
+
+  .corner > span {
+    position: absolute;
+    inset: 0;
+    box-shadow: 0 0 0 var(--radius) var(--floor);
+  }
+  .corner.start > span { border-end-start-radius: var(--radius); }
+  .corner.end > span { border-end-end-radius: var(--radius); }
+
+  .inner {
+    max-inline-size: 88rem;
+    margin-inline: auto;
+    padding-inline: clamp(1rem, 4vw, 3rem);
+    padding-block: clamp(2.5rem, 7vh, 4.5rem) clamp(1.25rem, 3vh, 2rem);
+  }
+
+  /* The identity column takes the larger share and the link columns divide what
+     is left, however many of them there are — the account column exists only on
+     a build with sign-in wired up. */
+  .cols {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) repeat(auto-fit, minmax(7rem, 1fr));
+    gap: clamp(2rem, 5vh, 3.5rem) clamp(1.5rem, 4vw, 3rem);
+  }
+
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+  .wordmark {
+    font-size: 1rem;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+  }
+
+  /* Running prose, so it is set at the body size and in full ink (§11) — the
+     smaller steps in the scale are for labels, and this is a sentence. */
+  .blurb {
+    margin: clamp(0.9rem, 2.5vh, 1.25rem) 0 0;
+    max-inline-size: 24rem;
+    font-size: 1.0625rem;
+    line-height: 1.55;
+    color: var(--ink);
+  }
+
+  .social {
+    display: inline-grid;
+    place-items: center;
+    inline-size: 2.5rem;
+    block-size: 2.5rem;
+    margin-block-start: clamp(1.25rem, 3.5vh, 2rem);
+    border-radius: 999px;
+    color: var(--ink);
+    opacity: 0.68;
+    transition: opacity 0.2s ease, background-color 0.2s ease,
+      transform 0.14s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .social svg {
+    inline-size: 1.25rem;
+    block-size: 1.25rem;
+  }
+  .social:hover {
+    opacity: 1;
+    /* The wall's own shadow colour, the same warm wash inline code sits in —
+       not a second solid control (§6). */
+    background: rgb(60 48 34 / 0.08);
+  }
+
+  .head {
+    margin: 0 0 1.1rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .group ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 0.7rem;
+  }
+
+  .group a {
+    font-size: 0.9375rem;
+    text-decoration: none;
+    color: inherit;
+    opacity: 0.68;
+    transition: opacity 0.2s ease;
+  }
+  .group a:hover { opacity: 1; }
+
+  /* A full-width hairline rather than the short rule of §8: that one separates
+     movements inside a column of prose, and this separates the page's content
+     from the notice under all of it. */
+  .notice {
+    margin: clamp(2.5rem, 7vh, 4rem) 0 0;
+    padding-block-start: clamp(1.25rem, 3vh, 1.75rem);
+    border-block-start: 1px solid var(--line);
+    text-align: center;
+    font-size: 0.8125rem;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+  }
+
+  /* Camaufalge has a glyph at U+00A9 and it is a bare ring the size of a degree
+     sign — next to a year it reads as a typo rather than as a notice. So this
+     one character is drawn from the system sans, which is the same trade §3
+     describes for everything outside the face's coverage, made on purpose here
+     rather than by the browser. The stack is written out because `--font-ui`
+     puts Camaufalge in front, which is precisely what has to be skipped. */
+  .sign {
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica,
+      Arial, sans-serif;
+    font-size: 0.9em;
+  }
+
+  .sr-only {
+    position: absolute;
+    inline-size: 1px; block-size: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+
+  /* Two columns of links under the identity block: the columns are short
+     enough to read side by side on a phone, and stacking five of them would
+     put the copyright a screen and a half below the wall. */
+  @media (max-width: 60rem) {
+    .cols { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .who { grid-column: 1 / -1; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .social { transition: none; }
+  }
+</style>
+
+<script>
+  /**
+   * The floor's own height, published as `--floor-block`.
+   *
+   * The landing page's runway is longer than this by exactly that much, so
+   * that the floor rises through scroll the page has spare rather than through
+   * the stretch the composition is still arriving in — see `.reel.reeling` in
+   * `src/components/Prism.astro`. So the number has to be the height the floor
+   * actually ends up: a stack of clamps on the viewport, a link list whose
+   * length depends on whether sign-in is configured, and a column count that
+   * changes at 60rem. A `ResizeObserver` rather than one measurement because
+   * every word here is set in a webfont loaded with `font-display: swap`:
+   * measured before the swap lands the number is short by however much the
+   * fallback's metrics differ, and the stage above comes unstuck by exactly
+   * that much at the end of the scroll.
+   *
+   * A page with no pinned runway above it reads the number and does nothing
+   * with it, which costs one custom property and no layout.
+   */
+  const floor = document.querySelector<HTMLElement>(".floor");
+  if (floor) {
+    const publish = () =>
+      document.documentElement.style.setProperty(
+        "--floor-block",
+        `${Math.round(floor.getBoundingClientRect().height)}px`
+      );
+    new ResizeObserver(publish).observe(floor);
+    publish();
+  }
+</script>

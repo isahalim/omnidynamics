@@ -3,7 +3,7 @@ import Base from "../layouts/Base.astro";
 import Logo from "../components/Logo.astro";
 import Prism from "../components/Prism.astro";
 import AccountActions from "../components/AccountActions.astro";
-import { ROUTES } from "../lib/auth/config";
+import Footer from "../components/Footer.astro";
 import { withBase } from "../lib/base";
 ---
 
@@ -21,8 +21,10 @@ import { withBase } from "../lib/base";
         <span class="wordmark">OmniDynamics</span>
       </a>
 
+      {/* The policy used to sit beside the rail as plain text. It is in the
+          floor now, with everything else a reader looks for at the end of a
+          page, which leaves the header as the way in and nothing else. */}
       <nav class="right">
-        <a class="quiet" href={ROUTES.privacy}>Privacy</a>
         <AccountActions />
       </nav>
     </header>
@@ -31,6 +33,13 @@ import { withBase } from "../lib/base";
       <Prism />
     </main>
   </div>
+
+  {/* Outside the shell, because it is full-bleed and the shell is a measured
+      column. The runway inside the shell is built a floor's height longer and
+      then gives that height back, so the grey rises over scroll the dial has
+      finished with and the shell ends on the floor's own top edge — see
+      `--floor-block` in the component and `.reel.reeling` in the prism. */}
+  <Footer />
 </Base>
 
 <style>
@@ -83,24 +92,11 @@ import { withBase } from "../lib/base";
     letter-spacing: -0.015em;
   }
 
-  /* The pill group carries the weight; the policy sits beside it as plain
-     text, always reachable and never competing with the way in. */
+  /* One pill group, carrying the whole of the way in. */
   .right {
     display: flex;
     align-items: center;
     gap: clamp(0.75rem, 2vw, 1.5rem);
-  }
-
-  .quiet {
-    font-size: 0.875rem;
-    text-decoration: none;
-    color: var(--muted);
-    transition: color 0.2s ease;
-  }
-  .quiet:hover { color: var(--ink); }
-
-  @media (max-width: 30rem) {
-    .quiet { display: none; }
   }
 </style>
 

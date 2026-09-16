@@ -50,6 +50,7 @@ colour, and adding one is the fastest way to stop looking like this.
   --muted:     #6d6459;              /* the quiet step — warm grey, never blue */
   --accent:    #c0281d;              /* errors. Nothing else. */
   --line:      rgb(60 48 34 / 0.12); /* hairlines */
+  --floor:     #e5e3df;              /* the grey the wall ends on — §9, the floor */
 }
 ```
 
@@ -57,7 +58,11 @@ colour, and adding one is the fastest way to stop looking like this.
 
 - `--muted` is a *warm* grey (a brown, really). A cool `#6b7280`-ish grey
   against this plaster reads as dirt. Every neutral in the system is mixed
-  toward the wall.
+  toward the wall — `--floor` included, which is a shade greyer and a shade
+  lighter than the plaster and still warm.
+- `--floor` is the **one ground the system paints**, and it is allowed only
+  where the room ends: the strip under the bottom of the wall. An opaque panel
+  anywhere above that cuts a hole in the plaster (§13).
 - Shadows are never black. They are `rgb(60 48 34 / …)` — the wall's own
   shadow colour — so a lifted object looks lit rather than cut out.
 - `--accent` appears exactly once in the live site: error text on the sign-in
@@ -129,9 +134,11 @@ sentence punctuation. Three consequences follow, and they are not bugs:
 - **There is no italic.** `<em>` is obliqued by the browser. Use it sparingly.
 - **Coverage stops at Latin-1 and the common punctuation.** Anything outside it
   is drawn from the fallback stack, one glyph at a time, in the middle of a line
-  that is otherwise Camaufalge. The `·` separating the footer links is the one
-  place this shows today. Before reaching for a character, check that the face
-  has it.
+  that is otherwise Camaufalge. Before reaching for a character, check that the
+  face has it — and check the ones it *does* have: the face draws `©` as a bare
+  ring the size of a degree sign, so the floor's copyright line hands that one
+  character to the system sans on purpose rather than letting it read as a typo.
+  A `·` between links is the same trade made by accident.
 
 **The comma is a baseline dot**, nearly indistinguishable from a full stop at
 body size. It is a property of the face. It is tolerable in a lede and in the
@@ -292,7 +299,9 @@ Four, and they are about the composition rather than about devices:
   padding tightens, a name truncates to `7rem`.
 
 **What is dropped is decoration; what survives is the way forward.** The demo
-button is on the phone. The privacy link is not.
+button is on the phone. The policy link is not in the header at all any more —
+it is in the floor (§9), with everything else a reader goes looking for at the
+end of a page rather than at the start.
 
 ---
 
@@ -461,8 +470,11 @@ scroll-triggered reveal the rule forbids.
 
 **The shape of it:**
 
-- A **runway** of `200dvh` exists only to give the dial somewhere to turn. The
-  page shell is otherwise unchanged.
+- A **runway** exists only to give the dial somewhere to turn: `220dvh`, plus
+  the floor's own measured height (§9), which it hands straight back to the page
+  as a negative bottom margin. So the dial turns over the first two screens, the
+  room empties over the next fifth of one, and the floor rises over the rest —
+  and the document is no longer than the parts add up to.
 - The **header and the stage are both `sticky`**, so every pixel of the runway
   shows the same frame. The stage sticks under the header at `--top-band`, a
   custom property carrying the header's measured height — measured, because the
@@ -474,6 +486,12 @@ scroll-triggered reveal the rule forbids.
 - What it drives is **two opacities and one material**: `--opening` on the
   display sentence, `--handover` on the copy and the control rail, and the
   object's own material, from its lit variant to its dark one (§12).
+- A **second dial takes the room back out again** at the far end: `--room`,
+  smoothstepped from 1 to 0 between `1.05` and `1.2` screens, multiplied into
+  the same opacities. It exists because the floor is opaque and the stage stays
+  pinned underneath it — without it the grey arrives through the middle of the
+  copy and cuts the control rail in half on the way past. Read in screens, not
+  on the handover's own dial, because what it answers to is the floor.
 - The two opacities **cross rather than overlap**: the opening is out by `0.62`
   and the landing chrome starts in at `0.38`, smoothstepped, so they are never
   both at half strength on top of each other.
@@ -484,7 +502,8 @@ scroll-triggered reveal the rule forbids.
   landing composition (`--opening: 0`, `--handover: 1`) and the runway is opened
   by the script, so a page whose JavaScript never ran is the site as it was.
 - **Opacity is not enough to switch a control off.** The rail takes `inert` at
-  the halfway point, so nothing under the opening can be pressed or tabbed to.
+  the halfway point of either dial, so nothing under the opening — or in a room
+  the page has finished with — can be pressed or tabbed to.
 - **Scroll-driven opacity carries no `transition`.** A crossfade's easing lags
   the scroll and reads as a stutter. Where an element needs both — the copy is
   swapped under the rail *and* faded by the dial — they go on two nested
@@ -575,6 +594,54 @@ behind it:
   one piece of glass read as one control; two bare links read as clutter.
 - **Everything else** is plain muted text beside the rail, at `0.875rem`, and
   is the first thing dropped below `30rem`.
+
+### The floor
+
+**Where the room ends.** The wall stops with a curved bottom edge and a quieter
+grey sheet carries on under it, holding the identity, the systems, the ways of
+getting in touch and the policy — everything a reader goes looking for at the
+end of a page rather than at the start. It is the only surface in the system
+that paints its own ground (§2).
+
+- **Five columns**: the identity (mark + wordmark, a sentence at body size in
+  full ink, and one social mark) at `minmax(0, 1.4fr)`, then the link groups at
+  `repeat(auto-fit, minmax(7rem, 1fr))` — `auto-fit`, because a group can be
+  absent on a build where its feature is not configured. Below `60rem` it is two
+  columns with the identity spanning both.
+- **Group heads are section heads** (§3): `0.75rem`, 600, uppercase, `0.12em`,
+  `--muted`. Links are `0.9375rem` at `0.68` opacity, going to `1` on hover.
+- **The copyright notice** is fine print, centred, under a full-width hairline in
+  `--line` — the one place a full-width divider is right, because it separates
+  the page's content from the notice under all of it rather than two movements
+  inside a column (§8).
+- **The social mark is not a solid.** One filled control per view is the rule
+  (§6), and it is the primary action; the mark is ink at `0.68` on the floor,
+  with the wall's own warm wash behind it on hover.
+
+**The curved corners are cut out of the floor, not drawn on the wall.** The
+plaster is a full-viewport canvas (§12) and cannot be given a radius without
+taking the object standing on it too. Each corner is a square the size of the
+radius, sitting on the wall's last band with `overflow: clip`, holding a
+transparent rounded corner whose *outside* is filled by a spread `box-shadow` in
+`--floor`. What is left is the sliver of grey the curve has freed, antialiased
+along the arc the way a real border-radius is.
+
+**On a page with a pinned stage, the floor is a scroll problem before it is a
+layout one** — see §7.1. Three values, all measured, all published as custom
+properties:
+
+| Property | Measured by | Read by |
+|---|---|---|
+| `--floor-block` | the floor's own `ResizeObserver` | the runway's height and its negative bottom margin |
+| `--top-band` | the header's `ResizeObserver` | the stage's offset, and the band of bare wall the floor leaves above itself |
+| `--room` | the scroll | the copy and the rail the floor would otherwise pass through |
+
+The band matters: the header paints nothing, so **nothing may pass behind it**.
+Ending the page shell one header-height above the floor's top edge is what keeps
+that true at the end of the scroll — the header stays pinned for as long as
+there is wall under it, then walks off the top of the screen exactly one band
+ahead of the grey. Without it the brand's bottom edge stops flush against the
+floor and a sliver of it sits there for the rest of the page.
 
 ### The segmented rail
 
@@ -1109,7 +1176,9 @@ Then, in order:
 ### The seven things that break the style
 
 1. A second brand colour, or a cool grey.
-2. An opaque panel behind copy — it cuts a hole in the wall.
+2. An opaque panel behind copy — it cuts a hole in the wall. The floor (§9) is
+   the one exception, and it is one because it is where the wall ends rather
+   than something laid on top of it.
 3. A `1px solid` border on the glass.
 4. A display setting below ~2.5rem, where the size contrast that replaced the
    family contrast stops reading as deliberate.
@@ -1129,11 +1198,12 @@ Then, in order:
 | The mark | `src/components/Logo.astro` |
 | Header pill rail | `src/components/AccountActions.astro` |
 | Landing composition, segmented rail | `src/components/Prism.astro` |
+| The floor (site footer) and its curved corners | `src/components/Footer.astro` |
 | Split composition (copy + object) | `src/pages/signin.astro`, `src/pages/soon/[state].astro` |
 | Prose page | `src/pages/privacy.astro`, `src/pages/404.astro` |
 | Glass framing a third-party embed | `src/pages/book.astro` |
 | Manifest, icons, theme colour | `src/pages/site.webmanifest.ts`, `scripts/build-icons.mjs` |
-| Scroll handover on the landing page | `src/components/Prism.astro`, `src/pages/index.astro` |
+| Scroll handover, and the room emptying for the floor | `src/components/Prism.astro`, `src/pages/index.astro` |
 | Share card (Open Graph) | `public/og.jpg`, `scripts/build-og.mjs` |
 | The typeface | `src/layouts/Base.astro` (`@font-face`, preload), `public/fonts/`, `assets/fonts/` |
 | Base-path helper (apex vs. Pages mirror) | `src/lib/base.ts` |

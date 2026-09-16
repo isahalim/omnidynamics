@@ -117,14 +117,44 @@ const OPENING =
     min-block-size: clamp(22rem, 66vh, 46rem);
   }
 
-  /* With it, the runway is two screens tall and the stage is pinned under the
-     header for all of them. `--top-band` is the header's own height, measured
-     on the page (see `src/pages/index.astro`), so the pyramid keeps the frame
-     it had rather than sliding up behind the brand. */
+  /* With it, the runway is two screens of dial, a fifth of a screen in which
+     the room empties, and the floor's own height under all of that — and the
+     stage is pinned under the header for every pixel of it. `--top-band` is
+     the header's own height, measured on the page (see `src/pages/index.astro`),
+     so the pyramid keeps the frame it had rather than sliding up behind the
+     brand.
+
+     The floor's height is in here twice, and for two different reasons.
+
+     In the size, because the floor scrolls in over a stage that is still
+     pinned: what buys the grey its travel is runway the dial has already
+     finished with, so the composition is settled and then emptied before the
+     first pixel of it arrives. Take it out and the two overlap — the copy
+     fades in under a rising floor. The stage is `position: sticky` inside this
+     box, so the box has to outlast the document or the stage comes unstuck at
+     the end and the picker drifts up the screen away from a shape that is
+     drawn on a canvas re-framed on resize, not on scroll.
+
+     And in the margin, which hands the same height straight back to the page,
+     so the document is the length it would have been and the floor begins at
+     the runway's own end. The header's own band goes with it, because the shell
+     is what pins the header and the header paints nothing — nothing may pass
+     behind it (DESIGN.md §9). Ending the shell a band above the floor's top
+     edge is what makes that true at the end of the scroll too: the header stays
+     pinned for as long as there is wall under it, and then walks off the top of
+     the screen exactly one band ahead of the grey, which the floor's matching
+     `margin-block-start` leaves clear for it. Without that band the brand's
+     bottom edge stops flush against the floor and a sliver of it sits there for
+     the rest of the page.
+
+     `--floor-block` is measured by `src/components/Footer.astro` and is 0 on a
+     page with no floor; `--top-band` is the header's own height, measured on
+     the page. */
   .reel.reeling {
     flex: none;
     display: block;
-    block-size: 200dvh;
+    block-size: calc(220dvh + var(--floor-block, 0px));
+    margin-block-end: calc(-1 * (var(--floor-block, 0px) + var(--top-band, 0px)));
   }
   .reel.reeling .stage {
     position: sticky;
@@ -213,6 +243,9 @@ const OPENING =
     pointer-events: none;
   }
 
+  /* Two dials, multiplied: `--handover` is the scroll bringing this in over the
+     opening sentence, and `--room` is the scroll taking it back out again at the
+     end of the page, before the floor arrives to stand where it was. */
   .about {
     grid-row: 2;
     grid-column: 1;
@@ -220,7 +253,7 @@ const OPENING =
     max-inline-size: 32rem;
     margin: 0;
     text-align: center;
-    opacity: var(--handover, 1);
+    opacity: calc(var(--handover, 1) * var(--room, 1));
   }
 
   .copy { transition: opacity 0.24s ease; }
@@ -277,10 +310,11 @@ const OPENING =
       inset 0 1px 0 rgb(255 255 255 / 0.9),
       0 1px 2px rgb(60 48 34 / 0.1),
       0 12px 28px -16px rgb(60 48 34 / 0.45);
-    opacity: var(--handover, 1);
+    opacity: calc(var(--handover, 1) * var(--room, 1));
   }
-  /* `inert` is set alongside this, so nothing under the opening is reachable by
-     tab either — but a pointer gets here first and this is what stops it. */
+  /* `inert` is set alongside this, so nothing under the opening — or in a room
+     the page has finished with — is reachable by tab either; but a pointer gets
+     here first and this is what stops it. */
   .picker[inert] { pointer-events: none; }
 
   .chip {
@@ -436,6 +470,7 @@ const OPENING =
   const openingAt = (at: number) => 1 - smoothStep(0, OPENING_OUT, at);
   /** Where the page stops being the opening and starts being the landing page. */
   const HALFWAY = 0.5;
+
   /**
    * And where the glass changes hands — high on the dial, deliberately not
    * where the copy does.
@@ -451,6 +486,41 @@ const OPENING =
    */
   const GLASS_CHANGES_AT = 0.8;
 
+  /* ---------------------------------------------------------------------- *
+   * And the room emptying, which is the other end of the same page.
+   *
+   * The floor rises over the last stretch of the scroll (see `.reel.reeling`
+   * above and `src/components/Footer.astro`), and the stage stays pinned to
+   * the whole viewport underneath it — so left alone the grey would arrive
+   * through the middle of the copy beside the glass and cut the picker in half
+   * along the way. The composition goes out on the scroll before it instead:
+   * by the time the floor's own edge is on screen there is nothing in the room
+   * for it to pass through, and what is behind it is bare lit plaster.
+   *
+   * Measured in screens, where the runway is 2.2 of them plus the floor's
+   * height, and the handover above is done by 0.8.
+   * ---------------------------------------------------------------------- */
+
+  /** Where the room starts emptying, and where it is empty. */
+  const EMPTY_FROM = 1.05;
+  const EMPTY_BY = 1.2;
+
+  /**
+   * How much of the composition is still up. Unset rather than 1, for the same
+   * reason `progress` is: a page restored from the back/forward cache comes
+   * back with the inline style it was put away with, and a dial that declined
+   * to publish a value it thought it already held would leave the room empty
+   * on a page that is back at the top.
+   */
+  let room = -1;
+
+  /**
+   * Under the opening, and in a room the page has emptied, there is nothing to
+   * press and nothing to tab to. Both dials say so, so it is asked twice.
+   */
+  const reachable = () =>
+    picker.toggleAttribute("inert", openingAt(progress) > HALFWAY || room < HALFWAY);
+
   const settle = (next: number) => {
     if (Math.abs(next - progress) < 0.0015) return;
     progress = next;
@@ -458,10 +528,17 @@ const OPENING =
     const handover = smoothStep(LANDING_IN, 1, next);
     stage.style.setProperty("--opening", opening.toFixed(4));
     stage.style.setProperty("--handover", handover.toFixed(4));
-    // Under the opening there is nothing to press and nothing to tab to.
-    picker.toggleAttribute("inert", opening > HALFWAY);
+    reachable();
     renderer.setOrbLight(opening);
     void present();
+  };
+
+  /** The other dial: how much of the composition the end of the page has left. */
+  const empty = (next: number) => {
+    if (Math.abs(next - room) < 0.0015) return;
+    room = next;
+    stage.style.setProperty("--room", next.toFixed(4));
+    reachable();
   };
 
   /**
@@ -480,7 +557,15 @@ const OPENING =
   const read = () =>
     Math.min(1, Math.max(0, window.scrollY / Math.max(1, window.innerHeight * HANDOVER)));
 
-  const onScroll = () => settle(read());
+  /** And how far down it is in screens, which is what the room answers to. */
+  const screens = () => window.scrollY / Math.max(1, window.innerHeight);
+
+  /** Both dials, from one scroll position. The room first, because what is
+      reachable under the opening depends on both of them. */
+  const dial = () => {
+    empty(1 - smoothStep(EMPTY_FROM, EMPTY_BY, screens()));
+    settle(read());
+  };
 
   // Lenis drives the real scroll position rather than a transform, so the
   // sticky stage, the anchor offsets and `window.scrollY` all still mean what
@@ -494,7 +579,7 @@ const OPENING =
     // always reach the document as one native event per frame, and a jump made
     // with `lenis.scrollTo` — the one the shape's own click makes — is only ever
     // announced here.
-    lenis.on("scroll", onScroll);
+    lenis.on("scroll", dial);
   };
   const unsmooth = () => {
     lenis?.destroy();
@@ -573,15 +658,15 @@ const OPENING =
   // The runway opens only now, because the dial reaches into the picker and a
   // page restored part-way down it would be read before there was one.
   reel.classList.add("reeling");
-  settle(read());
+  dial();
   smooth();
   reduceMotion.addEventListener("change", () => {
     unsmooth();
     smooth();
   });
-  window.addEventListener("scroll", onScroll, { passive: true });
+  window.addEventListener("scroll", dial, { passive: true });
   // The runway is measured in screens, so a rotated phone is a new runway.
-  window.addEventListener("resize", onScroll);
+  window.addEventListener("resize", dial);
 
   /**
    * A click on the shape opens it: a system's own site, or the coming-soon page
@@ -642,6 +727,7 @@ const OPENING =
     if (!event.persisted) return;
     renderer.resume();
     progress = -1;
-    settle(read());
+    room = -1;
+    dial();
   });
 </script>
