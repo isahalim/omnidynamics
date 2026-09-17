@@ -188,15 +188,46 @@ const fontFace = `@font-face {
   /* Components set display on these; without this the attribute is ignored. */
   [hidden] { display: none !important; }
 
-  /* Carries the wall colour too, not just the text-size fix — iOS Safari
-     paints its elastic overscroll (the rubber-band past the top and bottom
-     edges) with whatever is behind the document, which is `html`, not
-     `body`. Leaving it unset here is what the white strips above the header
-     and above the bottom toolbar were: the real wall showing everywhere
-     except the one place `html` was asked to be transparent. */
+  /* Carries the whole wall, not just the text-size fix. Two reasons, and the
+     background note below has them: iOS Safari paints its elastic overscroll
+     with whatever is behind the document, which is `html` and not `body`; and
+     the prism canvas sits behind `body`, so `body` is the one element on the
+     site that must not paint a wall at all. */
   html {
     -webkit-text-size-adjust: 100%;
-    background: var(--wall);
+    /* The whole fallback wall, on the root element — and it has to be the root
+       element, not `body`.
+
+       The prism canvas is `position: fixed` at `z-index: -1`, so it paints in
+       the negative-index step of its stacking context. A negative-index child
+       goes behind the *backgrounds of the in-flow blocks* around it, and `body`
+       is one of those blocks: anything opaque painted there covers the canvas
+       completely. That is exactly what was hiding the glass, the beam and the
+       lit plaster on sign-in, book-a-demo and the coming-soon pages, whose
+       canvas is a direct child of `body`. (The landing page escaped it only by
+       accident — its canvas sits inside `.page`, which opens its own stacking
+       context, so the negative index is contained there instead.)
+
+       The root's background has no such step to fall behind: it is propagated
+       to the canvas and painted under the entire document, beneath every
+       stacking context on the page. Put the wall here and the shader's wall
+       shows wherever the GPU one comes up, whatever the markup around the
+       canvas looks like.
+
+       The colour and the gradient are set apart rather than in one shorthand
+       because they do two different jobs. The gradient is the stand-in the
+       shader paints over — the 404, the moment before the canvas fades up,
+       a browser without WebGPU — and `fixed` keeps it anchored to the viewport
+       so it never travels with the scroll. The flat colour underneath it is
+       the paint of last resort: iOS Safari does not extend a fixed background
+       image into the rubber-band past the top and bottom edges, and without a
+       colour behind it that overscroll is the white strip commit 789244b put
+       this rule here to close. */
+    background-color: var(--wall);
+    background-image:
+      radial-gradient(120% 90% at 78% -12%, #d8d3c9 0%, transparent 62%),
+      linear-gradient(168deg, var(--wall) 0%, var(--wall-deep) 100%);
+    background-attachment: fixed;
   }
 
   body {
@@ -206,16 +237,11 @@ const fontFace = `@font-face {
     font-family: var(--font-ui);
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
-    /* The lit plaster and its tooth are shaded by the prism canvas, which
-       covers the whole viewport. This gradient is only ever seen where that
-       canvas is not: the 404, the moment before it fades up, and browsers
-       without WebGPU. It cannot show as a seam the way the old CSS wall did,
-       because the canvas either covers it completely or not at all — so it
-       approximates the shader's window pool rather than sitting flat. */
-    background:
-      radial-gradient(120% 90% at 78% -12%, #d8d3c9 0%, transparent 62%),
-      linear-gradient(168deg, var(--wall) 0%, var(--wall-deep) 100%);
-    background-attachment: fixed;
+    /* Nothing. The wall is on `html` above, and it has to stay off this
+       element: a background here is an opaque sheet between the prism canvas
+       and the reader, because `body` is an in-flow block and the canvas is
+       behind those. Pages paint the room they stand in — the footer's floor,
+       the glass of a card — never the room itself. */
   }
 
   img, svg { display: block; max-inline-size: 100%; }
