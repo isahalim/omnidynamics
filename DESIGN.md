@@ -475,11 +475,12 @@ scroll-triggered reveal the rule forbids.
   as a negative bottom margin. So the dial turns over the first two screens, the
   room empties over the next fifth of one, and the floor rises over the rest —
   and the document is no longer than the parts add up to.
-- The **header and the stage are both `sticky`**, so every pixel of the runway
-  shows the same frame. The stage sticks under the header at `--top-band`, a
-  custom property carrying the header's measured height — measured, because the
-  header's height is a clamp on the viewport plus a pill rail whose contents
-  depend on who is signed in.
+- The **stage is `sticky`**; the header is not — it scrolls off naturally with
+  the rest of the page. The stage sticks `--top-band` below the viewport's top
+  edge, a custom property carrying the header's measured height, so the frame
+  the pyramid keeps is sized to the header even after the header itself is
+  gone — measured, because the header's height is a clamp on the viewport plus
+  a pill rail whose contents depend on who is signed in.
 - The dial is **`scrollY / (0.8 × innerHeight)`**, clamped to `0…1`. It finishes
   well before the runway runs out, so the page is settled and still for the last
   stretch instead of arriving exactly as the scroll does.
@@ -580,10 +581,9 @@ page, never one per section.
 ### The header
 
 **Not a bar.** No background and no border — it sits directly on the wall, with
-the brand at the left and the actions at the right. It is not sticky either,
-except on a page that scrolls (§7.1), where it is pinned and still paints
-nothing, because the stage under it is pinned too and nothing ever passes
-behind it:
+the brand at the left and the actions at the right. It is never sticky,
+including on the page that scrolls (§7.1) — it scrolls off with the rest of
+the page rather than pinning, and paints nothing on the way out:
 
 - **Brand** = mark + wordmark in one link. Mark at `30px` on interior pages,
   `42px` on the landing page. Wordmark `1rem`/500 inside, `clamp(1rem, 1.35vw,
@@ -638,12 +638,11 @@ properties:
 | `--top-band` | the header's `ResizeObserver` | the stage's offset, and the band of bare wall the floor leaves above itself |
 | `--room` | the scroll | the copy and the rail the floor would otherwise pass through |
 
-The band matters: the header paints nothing, so **nothing may pass behind it**.
-Ending the page shell one header-height above the floor's top edge is what keeps
-that true at the end of the scroll — the header stays pinned for as long as
-there is wall under it, then walks off the top of the screen exactly one band
-ahead of the grey. Without it the brand's bottom edge stops flush against the
-floor and a sliver of it sits there for the rest of the page.
+The band matters even though the header itself is long gone by the time the
+floor arrives: the stage still holds `--top-band` of bare wall above itself for
+as long as it stays pinned, so the floor has to leave the same band clear above
+its own top edge, ending the page shell one header-height short. Without it the
+floor's top edge would ride up under the stage instead of meeting it.
 
 ### The segmented rail
 

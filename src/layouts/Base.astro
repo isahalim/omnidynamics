@@ -188,7 +188,16 @@ const fontFace = `@font-face {
   /* Components set display on these; without this the attribute is ignored. */
   [hidden] { display: none !important; }
 
-  html { -webkit-text-size-adjust: 100%; }
+  /* Carries the wall colour too, not just the text-size fix — iOS Safari
+     paints its elastic overscroll (the rubber-band past the top and bottom
+     edges) with whatever is behind the document, which is `html`, not
+     `body`. Leaving it unset here is what the white strips above the header
+     and above the bottom toolbar were: the real wall showing everywhere
+     except the one place `html` was asked to be transparent. */
+  html {
+    -webkit-text-size-adjust: 100%;
+    background: var(--wall);
+  }
 
   body {
     margin: 0;

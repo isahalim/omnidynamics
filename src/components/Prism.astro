@@ -137,15 +137,12 @@ const OPENING =
 
      And in the margin, which hands the same height straight back to the page,
      so the document is the length it would have been and the floor begins at
-     the runway's own end. The header's own band goes with it, because the shell
-     is what pins the header and the header paints nothing — nothing may pass
-     behind it (DESIGN.md §9). Ending the shell a band above the floor's top
-     edge is what makes that true at the end of the scroll too: the header stays
-     pinned for as long as there is wall under it, and then walks off the top of
-     the screen exactly one band ahead of the grey, which the floor's matching
-     `margin-block-start` leaves clear for it. Without that band the brand's
-     bottom edge stops flush against the floor and a sliver of it sits there for
-     the rest of the page.
+     the runway's own end. The header's own band goes with it: the header has
+     already scrolled off by the time any of this runway is on screen, but the
+     stage still pins `--top-band` below the viewport's top edge, so that same
+     gap of bare wall has to stay clear above the floor too, which the floor's
+     matching `margin-block-start` does. Without that band the floor's top edge
+     would ride up under the stage instead of meeting it.
 
      `--floor-block` is measured by `src/components/Footer.astro` and is 0 on a
      page with no floor; `--top-band` is the header's own height, measured on

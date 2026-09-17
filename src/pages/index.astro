@@ -12,9 +12,9 @@ import { withBase } from "../lib/base";
   description="OmniDynamics deploys scalable agentic systems and platforms for evaluating Physical AI Agents."
 >
   <div class="page">
-    <!-- Not a bar: the header sits directly on the wall with the prism. It is
-         pinned all the same, because the page under it scrolls now — and
-         nothing ever passes behind it, since the stage is pinned too. -->
+    <!-- Not a bar: the header sits directly on the wall with the prism. It
+         scrolls with the page rather than pinning, so it leaves the same way
+         it arrived. -->
     <header class="top" id="top">
       <a class="brand clicky" href={withBase("/")}>
         <Logo />
@@ -65,10 +65,9 @@ import { withBase } from "../lib/base";
 
   /* The header carries its own vertical padding rather than taking it from the
      page, so that what it occupies is one measurable band — which is what the
-     stage below sticks underneath. */
+     stage below sticks underneath. It is not itself pinned: it scrolls off
+     with the rest of the page, same as any other flex item in `.page`. */
   .top {
-    position: sticky;
-    inset-block-start: 0;
     z-index: 3;
     display: flex;
     align-items: center;
