@@ -43,7 +43,7 @@ export const PRISM_STATES: readonly PrismStateInfo[] = [
     // The one system you can go and read today, so the tesseract is a door
     // rather than a promise: it leads to the work itself, written up.
     label: "ChronoVoxel",
-    href: "https://isahalim.github.io/Embodied-XAI-Is-All-You-Need/",
+    href: "https://chronovoxel.omnidynamics.dev/",
     blurb:
       "A model-agnostic platform with an autonomous evaluation harness that " +
       "turns a physical AI agent's fleeting, frame-by-frame attention into " +
