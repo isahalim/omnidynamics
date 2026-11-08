@@ -20,14 +20,12 @@ const { state } = Astro.props;
 const HEADLINE: Record<string, readonly [string, string]> = {
   drone: ["The autonomous aerial", "platform, coming soon."],
   manipulator: ["Precision industrial", "motion, coming soon."],
-  robot: ["The humanoid for human", "spaces, coming soon."],
 };
 
 /** What it is, and the half of the line that is the way to ask about it. */
 const BLURB: Record<string, string> = {
   drone: "Flight stack, perception and fleet control",
   manipulator: "Repeatable industrial motion",
-  robot: "Built for human-shaped environments",
 };
 
 const systems = PRISM_STATES.filter((entry) => entry.soon);

@@ -53,6 +53,18 @@ export const PRISM_STATES: readonly PrismStateInfo[] = [
     hint: "Click the tesseract to access it",
   },
   {
+    // Still the robot in the glass (id, mesh and rig unchanged); what it
+    // stands for now is Prometheus, which is live.
+    id: "robot",
+    label: "Prometheus",
+    href: "https://prometheus.omnidynamics.dev/",
+    blurb:
+      "A live pair-sculpting studio: start from a cube and shape it together " +
+      "with an AI agent that watches your strokes from every side, infers " +
+      "what you are making, and sculpts alongside you in real time.",
+    hint: "Click the robot to access it",
+  },
+  {
     id: "drone",
     label: "Drone",
     href: null,
@@ -65,13 +77,6 @@ export const PRISM_STATES: readonly PrismStateInfo[] = [
     href: null,
     soon: true,
     hint: "Click the manipulator for information",
-  },
-  {
-    id: "robot",
-    label: "Robot",
-    href: null,
-    soon: true,
-    hint: "Click the robot for information",
   },
 ];
 
